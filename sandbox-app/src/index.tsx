@@ -1,13 +1,20 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import './index.css';
-import App from './App';
+import App from './components/App';
 import reportWebVitals from './reportWebVitals';
 import Config from './config/config';
 import { AuthProvider } from 'react-oidc-context';
 import { BrowserRouter, Route, Routes } from 'react-router';
-import LoggedIn from './LoggedIn';
-import Logout from './Logout';
+import LoggedIn from './components/LoggedIn';
+import Logout from './components/Logout';
+import Outline from './Outline';
+
+/*
+    Looking for something interesting in the code?
+    Get the full source code at https://nakom.is/mushroom-code
+    It's an open-source project, so feel free to contribute or use it as you like!
+*/
 
 const cognitoAuthConfig = {
     authority: Config.cognito.authority,
@@ -23,16 +30,20 @@ const root = ReactDOM.createRoot(
 );
 root.render(
     <React.StrictMode>
-        <AuthProvider {...cognitoAuthConfig}>
-            <BrowserRouter>
-                <Routes>
-                    <Route path="/" element={<App />} />
-                    <Route path="/loggedin" element={<LoggedIn />} />
-                    <Route path="/logout" element={<Logout />} />
-                    {/* Add more routes as needed */}
-                </Routes>
-            </BrowserRouter>
-        </AuthProvider>
+        <Outline>
+            <div className="main-content">
+                <AuthProvider {...cognitoAuthConfig}>
+                    <BrowserRouter>
+                        <Routes>
+                            <Route path="/" element={<App />} />
+                            <Route path="/loggedin" element={<LoggedIn />} />
+                            <Route path="/logout" element={<Logout />} />
+                            {/* Add more routes as needed */}
+                        </Routes>
+                    </BrowserRouter>
+                </AuthProvider>
+            </div>
+        </Outline>
     </React.StrictMode >
 );
 

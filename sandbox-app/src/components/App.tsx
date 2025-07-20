@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import logo from './wolf-white.png';
+import logo from '../images/wolf-white.png';
 import { useAuth } from 'react-oidc-context';
 import './App.css';
 import 'bootstrap/dist/css/bootstrap.css';
@@ -15,7 +15,7 @@ import {
     GetCredentialsForIdentityCommand,
     Credentials,
 } from "@aws-sdk/client-cognito-identity";
-import Config from './config/config';
+import Config from '../config/config';
 import HomePage from './pages/HomePage';
 
 const App: React.FC = () => {
@@ -129,16 +129,13 @@ const App: React.FC = () => {
                             <AppBar position="static">
                                 <Box sx={{ backgroundColor: '#1f2329' }}>
                                     <div style={{ display: 'flex' }}>
-                                        <Tabs value={tabId} onChange={onTabChange} aria-label="basic tabs example" sx={{
+                                        <Tabs value={tabId} onChange={onTabChange} aria-label="nakomis tabs" sx={{
                                             marginLeft: "0",
                                             "&& .Mui-selected": { // && are used to increase the specificity
                                                 color: "#d1d1d1",
                                             },
                                         }}>
-                                            <Tab label="Boot Boots" />
-                                            <Tab label="Telemetry" />
-                                            <Tab label="Commands" />
-                                            <Tab label="Settings" />
+                                            <Tab label="Home" />
                                         </Tabs>
                                         <div style={{ flexGrow: 1, display: 'flex', justifyContent: 'flex-end' }}>
                                             <button type="button" className="btn btn-primary" style={{ marginRight: 10, alignSelf: "anchor-center" }} onClick={() => {
@@ -150,7 +147,7 @@ const App: React.FC = () => {
                                 </Box>
                             </AppBar>
                             <Box sx={{ width: '100%' }}>
-                                <HomePage tabId={tabId} index={3} creds={creds}></HomePage>
+                                <HomePage tabId={tabId} index={0} creds={creds}></HomePage>
                             </Box>
                         </ThemeProvider>
                         {
@@ -167,9 +164,7 @@ const App: React.FC = () => {
             <div className="App">
                 <header className="App-header">
                     <img src={logo} className="App-logo" alt="logo" />
-                    <p>
-                        Welcome to Nakomis Softworks
-                    </p>
+                    <p>Welcome to Nakomis Softworks</p>
                     <p>Login below to continue</p>
                     <div>
                         <button type="button" className="btn btn-primary" onClick={() => auth.signinRedirect()}>Sign in</button>
