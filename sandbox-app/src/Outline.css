@@ -1,0 +1,14 @@
+.Outline {
+  background-color: #282c34;
+  min-height: 100vh;
+  color: white;
+  display: flex;
+  flex-direction: column;
+  font-size: calc(10px + 2vmin);
+  /* padding-bottom: 99px; */
+  /* 
+  align-items: center;
+  font-size: calc(10px + 2vmin);
+  color: white;
+  */
+}

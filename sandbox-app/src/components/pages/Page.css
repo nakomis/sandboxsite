@@ -1,0 +1,7 @@
+.Page {
+    padding-top: 1vh;
+    display: flex;
+    flex-direction: column;
+    align-items: top;
+    justify-content: top;
+}
