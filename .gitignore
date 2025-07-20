@@ -140,3 +140,4 @@ vite.config.ts.timestamp-*
 
 # MH Vim swap files
 **/*.swp
+.DS_Store
