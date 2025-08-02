@@ -3,6 +3,7 @@ import * as cdk from 'aws-cdk-lib';
 import { CloudfrontStack } from '../lib/cloudfront-stack';
 import { CertificateStack } from '../lib/certificate-stack';
 import { CognitoStack } from '../lib/cognito-stack';
+import { FirmwareBucketStack } from '../lib/firmware-bucket-stack';
 import { S3 } from 'aws-cdk-lib/aws-ses-actions';
 
 const londonEnv = { env: { account: process.env.CDK_DEFAULT_ACCOUNT, region: process.env.CDK_DEFAULT_REGION } };
@@ -30,4 +31,9 @@ const cognitoStack = new CognitoStack(app, 'SandboxCognitoStack', {
     domainName: domainName,
     authCertificateArn: certificateStack.authCertificate,
     crossRegionReferences: true
+});
+
+const firmwareBucketStack = new FirmwareBucketStack(app, 'SandboxFirmwareBucketStack', {
+    ...londonEnv,
+    userRole: cognitoStack.userRole
 });

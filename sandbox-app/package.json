@@ -4,6 +4,9 @@
     "private": true,
     "dependencies": {
         "@aws-sdk/client-cognito-identity": "^3.848.0",
+        "@aws-sdk/client-s3": "^3.859.0",
+        "@aws-sdk/credential-provider-cognito-identity": "^3.859.0",
+        "@aws-sdk/s3-request-presigner": "^3.859.0",
         "@emotion/react": "^11.14.0",
         "@emotion/styled": "^11.14.0",
         "@mui/material": "^7.2.0",
