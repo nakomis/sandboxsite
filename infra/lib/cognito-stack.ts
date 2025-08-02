@@ -14,6 +14,7 @@ export interface CognitoStackProps extends cdk.StackProps {
 export class CognitoStack extends cdk.Stack {
     readonly userPool: cognito.UserPool;
     readonly userPoolClient: cognito.UserPoolClient;
+    readonly userRole: cdk.aws_iam.Role;
 
     constructor(scope: Construct, id: string, props: CognitoStackProps) {
         super(scope, id, props);
@@ -74,7 +75,7 @@ export class CognitoStack extends cdk.Stack {
             }],
         });
 
-        const sandboxUserRole = new cdk.aws_iam.Role(this, 'SandboxUserRole', {
+        this.userRole = new cdk.aws_iam.Role(this, 'SandboxUserRole', {
             assumedBy: new cdk.aws_iam.FederatedPrincipal(
                 'cognito-identity.amazonaws.com',
                 {
@@ -88,7 +89,7 @@ export class CognitoStack extends cdk.Stack {
         new cognito.CfnIdentityPoolRoleAttachment(this, 'SandboxIdentityPoolRoleAttachment', {
             identityPoolId: identityPool.ref,
             roles: {
-                authenticated: sandboxUserRole.roleArn,
+                authenticated: this.userRole.roleArn,
             },
         });
 

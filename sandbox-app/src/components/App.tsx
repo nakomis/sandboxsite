@@ -19,6 +19,7 @@ import Config from '../config/config';
 import HomePage from './pages/HomePage';
 import BluetoothPage from './pages/Bluetooth';
 import OTAUpdatePage from './pages/OTAUpdate';
+import FirmwareManagerPage from './pages/FirmwareManager';
 
 const App: React.FC = () => {
     const auth = useAuth();
@@ -140,6 +141,7 @@ const App: React.FC = () => {
                                             <Tab label="Home" />
                                             <Tab label="Bluetooth" />
                                             <Tab label="OTA Updates" />
+                                            <Tab label="Firmware Manager" />
                                         </Tabs>
                                         <div style={{ flexGrow: 1, display: 'flex', justifyContent: 'flex-end' }}>
                                             <button type="button" className="btn btn-primary" style={{ marginRight: 10, alignSelf: "anchor-center" }} onClick={() => {
@@ -154,6 +156,7 @@ const App: React.FC = () => {
                                 <HomePage tabId={tabId} index={0} creds={creds}></HomePage>
                                 <BluetoothPage tabId={tabId} index={1} creds={creds}></BluetoothPage>
                                 <OTAUpdatePage tabId={tabId} index={2} creds={creds}></OTAUpdatePage>
+                                <FirmwareManagerPage tabId={tabId} index={3} creds={creds}></FirmwareManagerPage>
                             </Box>
                         </ThemeProvider>
                         {
