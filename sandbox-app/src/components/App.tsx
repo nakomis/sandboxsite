@@ -24,7 +24,17 @@ import FirmwareManagerPage from './pages/FirmwareManager';
 const App: React.FC = () => {
     const auth = useAuth();
     const [creds, setCreds] = React.useState<Credentials | null>(null);
-    const [tabId, setTabId] = React.useState(0);
+    
+    // Get initial tab from cookie or default to 0
+    const getInitialTab = (): number => {
+        const savedTab = document.cookie
+            .split('; ')
+            .find(row => row.startsWith('selectedTab='))
+            ?.split('=')[1];
+        return savedTab ? parseInt(savedTab, 10) : 0;
+    };
+    
+    const [tabId, setTabId] = React.useState(getInitialTab);
 
     async function getAWSCredentialsFromIdToken(
         region: string,
@@ -79,6 +89,10 @@ const App: React.FC = () => {
 
     const onTabChange = (event: React.ChangeEvent<{}>, newValue: number) => {
         setTabId(newValue);
+        // Save selected tab to cookie (expires in 30 days)
+        const expiryDate = new Date();
+        expiryDate.setDate(expiryDate.getDate() + 30);
+        document.cookie = `selectedTab=${newValue}; expires=${expiryDate.toUTCString()}; path=/`;
     };
 
     const theme = createTheme({
