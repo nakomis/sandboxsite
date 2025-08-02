@@ -13,16 +13,20 @@ interface FirmwareManifest {
     versions: FirmwareVersion[];
 }
 
+export interface FirmwareProject {
+    name: string;
+    displayName: string;
+    lastUpdated?: string;
+}
+
 export class FirmwareService {
     private s3Client: S3Client | null = null;
     private bucketName: string;
-    private projectName: string;
     private region: string;
 
-    constructor(region: string = 'eu-west-2', bucketName: string = 'bootboots-firmware-updates', projectName: string = 'BootBoots') {
+    constructor(region: string = 'eu-west-2', bucketName: string = 'bootboots-firmware-updates') {
         this.region = region;
         this.bucketName = bucketName;
-        this.projectName = projectName;
     }
 
     /**
@@ -44,9 +48,49 @@ export class FirmwareService {
     }
 
     /**
-     * Load firmware manifest from S3
+     * List available firmware projects
      */
-    async loadFirmwareManifest(creds: any): Promise<FirmwareManifest> {
+    async listProjects(creds: any): Promise<FirmwareProject[]> {
+        try {
+            this.initializeS3Client(creds);
+            
+            if (!this.s3Client) {
+                throw new Error('S3 client not initialized');
+            }
+
+            const command = new ListObjectsV2Command({
+                Bucket: this.bucketName,
+                Delimiter: '/',
+                MaxKeys: 100
+            });
+
+            const response = await this.s3Client.send(command);
+            const projects: FirmwareProject[] = [];
+
+            if (response.CommonPrefixes) {
+                for (const prefix of response.CommonPrefixes) {
+                    if (prefix.Prefix) {
+                        const projectName = prefix.Prefix.replace('/', '');
+                        projects.push({
+                            name: projectName,
+                            displayName: projectName.charAt(0).toUpperCase() + projectName.slice(1),
+                            lastUpdated: undefined
+                        });
+                    }
+                }
+            }
+
+            return projects.sort((a, b) => a.displayName.localeCompare(b.displayName));
+        } catch (error) {
+            console.error('Error listing projects:', error);
+            throw new Error(`Failed to list projects: ${error}`);
+        }
+    }
+
+    /**
+     * Load firmware manifest from S3 for a specific project
+     */
+    async loadFirmwareManifest(projectName: string, creds: any): Promise<FirmwareManifest> {
         try {
             this.initializeS3Client(creds);
             
@@ -56,7 +100,7 @@ export class FirmwareService {
 
             const command = new GetObjectCommand({
                 Bucket: this.bucketName,
-                Key: `${this.projectName}/manifest.json`
+                Key: `${projectName}/manifest.json`
             });
 
             const response = await this.s3Client.send(command);
@@ -97,10 +141,10 @@ export class FirmwareService {
     }
 
     /**
-     * Get firmware versions sorted by version (newest first)
+     * Get firmware versions for a specific project, sorted by version (newest first)
      */
-    async getAvailableFirmwareVersions(creds: any): Promise<FirmwareVersion[]> {
-        const manifest = await this.loadFirmwareManifest(creds);
+    async getAvailableFirmwareVersions(projectName: string, creds: any): Promise<FirmwareVersion[]> {
+        const manifest = await this.loadFirmwareManifest(projectName, creds);
         
         // Sort versions by semantic version (newest first)
         return manifest.versions.sort((a, b) => {
@@ -121,31 +165,12 @@ export class FirmwareService {
     }
 
     /**
-     * Get the latest firmware version
-     */
-    async getLatestFirmwareVersion(creds: any): Promise<FirmwareVersion | null> {
-        const versions = await this.getAvailableFirmwareVersions(creds);
-        return versions.length > 0 ? versions[0] : null;
-    }
-
-    /**
-     * Check if a firmware version exists
-     */
-    async firmwareVersionExists(version: string, creds: any): Promise<boolean> {
-        try {
-            const versions = await this.getAvailableFirmwareVersions(creds);
-            return versions.some(v => v.version === version);
-        } catch (error) {
-            console.error('Error checking firmware version:', error);
-            return false;
-        }
-    }
 
     /**
      * Get firmware download URL (signed URL for secure access)
      */
-    async getFirmwareDownloadUrl(version: string, creds: any): Promise<string> {
-        const versions = await this.getAvailableFirmwareVersions(creds);
+    async getFirmwareDownloadUrl(projectName: string, version: string, creds: any): Promise<string> {
+        const versions = await this.getAvailableFirmwareVersions(projectName, creds);
         const firmware = versions.find(v => v.version === version);
         
         if (!firmware) {
