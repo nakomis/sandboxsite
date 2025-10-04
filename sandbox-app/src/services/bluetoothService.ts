@@ -17,6 +17,7 @@ export class BluetoothService {
     private otaService: BluetoothRemoteGATTService | null = null;
     private commandCharacteristic: BluetoothRemoteGATTCharacteristic | null = null;
     private statusCharacteristic: BluetoothRemoteGATTCharacteristic | null = null;
+    private currentVersion: string = 'Unknown';
 
     // UUIDs for BootBoots OTA service
     private readonly OTA_SERVICE_UUID = '12345678-1234-1234-1234-123456789abc';
@@ -54,11 +55,34 @@ export class BluetoothService {
             // Set up disconnect handler
             this.device.addEventListener('gattserverdisconnected', this.onDisconnected.bind(this));
 
+            // Read initial status to get current version
+            await this.refreshVersion();
+
             console.log('Connected to BootBoots device:', this.device.name);
         } catch (error) {
             console.error('Bluetooth connection failed:', error);
             throw new Error(`Failed to connect to BootBoots device: ${error}`);
         }
+    }
+
+    /**
+     * Refresh current firmware version from device
+     */
+    private async refreshVersion(): Promise<void> {
+        try {
+            const status = await this.getStatus();
+            this.currentVersion = status.version || 'Unknown';
+        } catch (error) {
+            console.warn('Failed to get version from device:', error);
+            this.currentVersion = 'Unknown';
+        }
+    }
+
+    /**
+     * Get current firmware version
+     */
+    getCurrentVersion(): string {
+        return this.currentVersion;
     }
 
     /**
@@ -109,8 +133,10 @@ export class BluetoothService {
             const encoder = new TextEncoder();
             const data = encoder.encode(commandString);
 
+            console.log(`Sending OTA command (${data.length} bytes):`, command);
+
             await this.commandCharacteristic.writeValue(data);
-            console.log('OTA command sent:', command);
+            console.log('OTA command sent successfully');
         } catch (error) {
             console.error('Failed to send OTA command:', error);
             throw new Error(`Failed to send OTA command: ${error}`);

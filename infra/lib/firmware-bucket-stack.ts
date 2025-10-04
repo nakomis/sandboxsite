@@ -18,7 +18,14 @@ export class FirmwareBucketStack extends cdk.Stack {
             bucketName: 'bootboots-firmware-updates',
             versioned: true,
             encryption: s3.BucketEncryption.S3_MANAGED,
-            blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
+            // Allow public read access for firmware downloads (ESP32 devices)
+            blockPublicAccess: new s3.BlockPublicAccess({
+                blockPublicAcls: true,
+                blockPublicPolicy: false, // Allow bucket policy for public read
+                ignorePublicAcls: true,
+                restrictPublicBuckets: false
+            }),
+            publicReadAccess: false, // We'll control via bucket policy instead
             removalPolicy: cdk.RemovalPolicy.RETAIN,
             cors: [
                 {
@@ -88,6 +95,16 @@ export class FirmwareBucketStack extends cdk.Stack {
         // Attach policies to the user role
         props.userRole.addToPolicy(firmwareBucketPolicy);
         props.userRole.addToPolicy(signedUrlPolicy);
+
+        // Add bucket policy to allow public read access to firmware files
+        // This allows ESP32 devices to download firmware without authentication
+        this.firmwareBucket.addToResourcePolicy(new iam.PolicyStatement({
+            sid: 'PublicReadFirmware',
+            effect: iam.Effect.ALLOW,
+            principals: [new iam.AnyPrincipal()],
+            actions: ['s3:GetObject'],
+            resources: [`${this.firmwareBucket.bucketArn}/*`]
+        }));
 
         // Output the bucket name for reference
         new cdk.CfnOutput(this, 'FirmwareBucketName', {
