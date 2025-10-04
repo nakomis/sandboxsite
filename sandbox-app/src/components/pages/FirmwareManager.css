@@ -276,6 +276,109 @@
     line-height: 1.5;
 }
 
+/* Version Display Styles */
+.connected-info {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    margin-top: 20px;
+    padding: 20px;
+    background: #3a4650;
+    border-radius: 8px;
+}
+
+.version-badge {
+    display: inline-block;
+    padding: 12px 20px;
+    font-size: 24px;
+    font-weight: bold;
+    border-radius: 6px;
+    font-family: 'Courier New', monospace;
+}
+
+.version-badge.current {
+    background: #1e3a5f;
+    color: #90caf9;
+    border: 2px solid #90caf9;
+}
+
+.version-badge.latest {
+    background: #1e3a2f;
+    color: #81c784;
+    border: 2px solid #81c784;
+}
+
+.update-available {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    background: linear-gradient(135deg, #ffa726 0%, #ff9800 100%);
+    border-radius: 8px;
+    font-weight: bold;
+    font-size: 18px;
+    color: #fff;
+    box-shadow: 0 4px 6px rgba(255, 167, 38, 0.4);
+    animation: pulse 2s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% {
+        transform: scale(1);
+        box-shadow: 0 4px 6px rgba(255, 167, 38, 0.4);
+    }
+    50% {
+        transform: scale(1.02);
+        box-shadow: 0 6px 12px rgba(255, 167, 38, 0.6);
+    }
+}
+
+.disconnect-button {
+    padding: 10px 20px;
+    background: linear-gradient(135deg, #e57373 0%, #ef5350 100%);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+.disconnect-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(239, 83, 80, 0.4);
+}
+
+.update-message {
+    margin-top: 10px;
+    padding: 10px;
+    background: #1e3a5f;
+    border-left: 4px solid #90caf9;
+    color: #90caf9;
+    font-size: 14px;
+    font-weight: 500;
+    border-radius: 4px;
+}
+
+.cancel-button {
+    margin-top: 15px;
+    padding: 10px 20px;
+    background: linear-gradient(135deg, #757575 0%, #616161 100%);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 600;
+    transition: all 0.3s ease;
+}
+
+.cancel-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(117, 117, 117, 0.4);
+}
+
 .info-content {
     background-color: #3a4650;
     border-radius: 8px;

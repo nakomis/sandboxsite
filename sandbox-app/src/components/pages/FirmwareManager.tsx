@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import Page, { PageProps } from './Page';
 import { firmwareService, FirmwareProject } from '../../services/firmwareService';
+import { bluetoothService } from '../../services/bluetoothService';
 import './FirmwareManager.css';
 
 interface FirmwareVersion {
@@ -24,9 +25,11 @@ const FirmwareManager: React.FC<FirmwareManagerProps> = ({ ...pageProps }) => {
     const [selectedProject, setSelectedProject] = useState<string>('');
     const [manifest, setManifest] = useState<FirmwareManifest | null>(null);
     const [selectedVersion, setSelectedVersion] = useState<string>('');
+    const [currentVersion, setCurrentVersion] = useState<string>('');
     const [isConnected, setIsConnected] = useState(false);
     const [connectionStatus, setConnectionStatus] = useState('Disconnected');
     const [updateProgress, setUpdateProgress] = useState(0);
+    const [updateStatus, setUpdateStatus] = useState<string>('');
     const [isUpdating, setIsUpdating] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [loadingProjects, setLoadingProjects] = useState(true);
@@ -105,13 +108,36 @@ const FirmwareManager: React.FC<FirmwareManagerProps> = ({ ...pageProps }) => {
     };
 
     const connectToBluetooth = async () => {
-        // Placeholder for Bluetooth connection logic
-        setConnectionStatus('Connecting...');
-        // Simulate connection
-        setTimeout(() => {
+        try {
+            setConnectionStatus('Connecting...');
+            setError(null);
+
+            await bluetoothService.connect();
+
             setIsConnected(true);
             setConnectionStatus('Connected');
-        }, 2000);
+
+            // Get current firmware version from device
+            const version = bluetoothService.getCurrentVersion();
+            setCurrentVersion(version);
+
+        } catch (err) {
+            console.error('Bluetooth connection failed:', err);
+            setError(`Failed to connect: ${err}`);
+            setConnectionStatus('Disconnected');
+            setIsConnected(false);
+        }
+    };
+
+    const disconnectBluetooth = async () => {
+        try {
+            await bluetoothService.disconnect();
+            setIsConnected(false);
+            setConnectionStatus('Disconnected');
+            setCurrentVersion('');
+        } catch (err) {
+            console.error('Disconnect failed:', err);
+        }
     };
 
     const startUpdate = async () => {
@@ -120,35 +146,73 @@ const FirmwareManager: React.FC<FirmwareManagerProps> = ({ ...pageProps }) => {
             return;
         }
 
+        if (!isConnected) {
+            setError('Please connect to device first');
+            return;
+        }
+
         try {
             setError(null);
             setIsUpdating(true);
             setUpdateProgress(0);
+            setUpdateStatus('Generating signed URL...');
 
-            // Get download URL for selected firmware
+            // Get signed download URL for selected firmware
             const downloadUrl = await firmwareService.getFirmwareDownloadUrl(
-                selectedProject, 
-                selectedVersion, 
+                selectedProject,
+                selectedVersion,
                 pageProps.creds
             );
 
-            // Simulate update progress
-            const progressInterval = setInterval(() => {
-                setUpdateProgress(prev => {
-                    if (prev >= 100) {
-                        clearInterval(progressInterval);
+            setUpdateStatus('Sending OTA command to device...');
+
+            // Start monitoring progress updates
+            await bluetoothService.startProgressMonitoring((response) => {
+                console.log('OTA Status Update:', response);
+                setUpdateStatus(response.message);
+
+                if (response.progress !== undefined) {
+                    setUpdateProgress(response.progress);
+                }
+
+                // Check if update completed or failed
+                if (response.status === 'error') {
+                    setError(`Update failed: ${response.message}`);
+                    setIsUpdating(false);
+                } else if (response.progress === 100) {
+                    setUpdateStatus('Update complete! Device will reboot...');
+                    setTimeout(() => {
                         setIsUpdating(false);
-                        return 100;
-                    }
-                    return prev + 10;
-                });
-            }, 500);
+                        setUpdateProgress(0);
+                        setUpdateStatus('');
+                    }, 3000);
+                }
+            });
+
+            // Send OTA update command to ESP32
+            await bluetoothService.sendOTACommand(downloadUrl, selectedVersion);
+
+            setUpdateStatus('Update initiated - waiting for device...');
 
         } catch (err) {
             console.error('Error starting update:', err);
             setError(`Failed to start update: ${err}`);
             setIsUpdating(false);
             setUpdateProgress(0);
+            setUpdateStatus('');
+            await bluetoothService.stopProgressMonitoring();
+        }
+    };
+
+    const cancelUpdate = async () => {
+        try {
+            await bluetoothService.cancelUpdate();
+            await bluetoothService.stopProgressMonitoring();
+            setIsUpdating(false);
+            setUpdateProgress(0);
+            setUpdateStatus('');
+        } catch (err) {
+            console.error('Failed to cancel update:', err);
         }
     };
 
@@ -251,15 +315,40 @@ const FirmwareManager: React.FC<FirmwareManagerProps> = ({ ...pageProps }) => {
                             {connectionStatus}
                         </span>
                     </div>
-                    
-                    {!isConnected && (
-                        <button 
-                            className="connect-button" 
+
+                    {!isConnected ? (
+                        <button
+                            className="connect-button"
                             onClick={connectToBluetooth}
                             disabled={connectionStatus === 'Connecting...'}
                         >
                             {connectionStatus === 'Connecting...' ? 'Connecting...' : 'Connect via Bluetooth'}
                         </button>
+                    ) : (
+                        <div className="connected-info">
+                            <div className="version-info">
+                                <h4>Current Device Version</h4>
+                                <div className="version-badge current">{currentVersion}</div>
+                            </div>
+                            {manifest && manifest.versions.length > 0 && (
+                                <div className="version-info">
+                                    <h4>Latest Available Version</h4>
+                                    <div className="version-badge latest">{manifest.versions[0].version}</div>
+                                </div>
+                            )}
+                            {currentVersion && manifest && manifest.versions.length > 0 &&
+                             currentVersion !== manifest.versions[0].version && (
+                                <div className="update-available">
+                                    ⚡ Update Available!
+                                </div>
+                            )}
+                            <button
+                                className="disconnect-button"
+                                onClick={disconnectBluetooth}
+                            >
+                                Disconnect
+                            </button>
+                        </div>
                     )}
                 </div>
 
@@ -272,22 +361,31 @@ const FirmwareManager: React.FC<FirmwareManagerProps> = ({ ...pageProps }) => {
                             <div className="update-status">
                                 <p>Updating firmware to version {selectedVersion}...</p>
                                 <div className="progress-bar">
-                                    <div 
-                                        className="progress-fill" 
+                                    <div
+                                        className="progress-fill"
                                         style={{ width: `${updateProgress}%` }}
                                     ></div>
                                     <div className="progress-text">{updateProgress}%</div>
                                 </div>
+                                <div className="update-message">{updateStatus}</div>
+                                <button
+                                    className="cancel-button"
+                                    onClick={cancelUpdate}
+                                >
+                                    Cancel Update
+                                </button>
                             </div>
                         )}
-                        
-                        <button 
-                            className="update-button"
-                            onClick={startUpdate}
-                            disabled={isUpdating || !selectedVersion}
-                        >
-                            {isUpdating ? 'Updating...' : `Update to v${selectedVersion}`}
-                        </button>
+
+                        {!isUpdating && (
+                            <button
+                                className="update-button"
+                                onClick={startUpdate}
+                                disabled={!selectedVersion || !isConnected}
+                            >
+                                Update to v{selectedVersion}
+                            </button>
+                        )}
                         
                         <div className="action-info">
                             <p>Update Instructions:</p>

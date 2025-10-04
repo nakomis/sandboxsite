@@ -165,19 +165,20 @@ export class FirmwareService {
     }
 
     /**
-
-    /**
-     * Get firmware download URL (signed URL for secure access)
+     * Get firmware download URL (public URL for ESP32 access)
      */
     async getFirmwareDownloadUrl(projectName: string, version: string, creds: any): Promise<string> {
         const versions = await this.getAvailableFirmwareVersions(projectName, creds);
         const firmware = versions.find(v => v.version === version);
-        
+
         if (!firmware) {
             throw new Error(`Firmware version ${version} not found`);
         }
-        
-        return await this.generateSignedUrl(firmware.firmware_path);
+
+        // Return direct public URL instead of signed URL
+        // Bucket policy allows public read access to firmware files
+        // NOTE: Using HTTP instead of HTTPS to avoid TLS memory issues on ESP32
+        return `http://${this.bucketName}.s3.${this.region}.amazonaws.com/${firmware.firmware_path}`;
     }
 }
 
