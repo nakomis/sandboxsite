@@ -5,7 +5,7 @@ import {
 } from "@aws-sdk/client-cognito-identity";
 import "./Bluetooth.css";
 import Page, { PageProps } from "./Page";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 
 // BootBoots BLE Service UUIDs (lowercase as required by Web Bluetooth API)
 const BOOTBOOTS_SERVICE_UUID = "bb00b007-5af3-41c3-9689-2fc7175c1ba8";
@@ -52,7 +52,7 @@ interface BluetoothConnection {
 
 const BluetoothPage = (props: BluetoothProps) => {
     const { children, tabId, index } = props;
-    
+
     // Connection state
     const [connection, setConnection] = useState<BluetoothConnection>({
         device: null,
@@ -62,13 +62,19 @@ const BluetoothPage = (props: BluetoothProps) => {
         logsCharacteristic: null,
         commandCharacteristic: null
     });
-    
+
     // Data state
     const [systemStatus, setSystemStatus] = useState<BootBootsSystemStatus | null>(null);
     const [logData, setLogData] = useState<string>("");
     const [connectionStatus, setConnectionStatus] = useState<string>("Disconnected");
     const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
     const [error, setError] = useState<string | null>(null);
+    const [isLoadingLogs, setIsLoadingLogs] = useState<boolean>(false);
+
+    // Debug: Log when logData changes
+    useEffect(() => {
+        console.log('logData state changed:', logData);
+    }, [logData]);
 
     // Handle status characteristic notifications
     const handleStatusUpdate = useCallback(async (event: Event) => {
@@ -77,7 +83,7 @@ const BluetoothPage = (props: BluetoothProps) => {
             const value = await characteristic.readValue();
             const statusJson = new TextDecoder().decode(value);
             const status = JSON.parse(statusJson) as BootBootsSystemStatus;
-            
+
             setSystemStatus(status);
             setLastUpdate(new Date());
             setError(null);
@@ -93,9 +99,12 @@ const BluetoothPage = (props: BluetoothProps) => {
             setConnectionStatus("Connecting...");
             setError(null);
 
-            // Request device
+            // Request device - filter by name instead of service UUID for better compatibility
             const device = await navigator.bluetooth.requestDevice({
-                filters: [{ services: [BOOTBOOTS_SERVICE_UUID] }],
+                filters: [
+                    { name: 'BootBoots-CatCam' },
+                    { namePrefix: 'BootBoots' }
+                ],
                 optionalServices: [BOOTBOOTS_SERVICE_UUID]
             });
 
@@ -118,6 +127,43 @@ const BluetoothPage = (props: BluetoothProps) => {
             await statusChar.startNotifications();
             statusChar.addEventListener('characteristicvaluechanged', handleStatusUpdate);
 
+            // Start notifications for command responses (ping, logs, etc.)
+            await commandChar.startNotifications();
+            commandChar.addEventListener('characteristicvaluechanged', async (event) => {
+                try {
+                    const characteristic = event.target as BluetoothRemoteGATTCharacteristic;
+                    const value = characteristic.value;
+                    if (value) {
+                        const responseText = new TextDecoder().decode(value);
+                        console.log('Command response received:', responseText);
+
+                        // Try to parse as JSON
+                        try {
+                            const responseJson = JSON.parse(responseText);
+
+                            // Check if it's an array (log data)
+                            if (Array.isArray(responseJson)) {
+                                console.log('Log data received via notification (array)');
+                                console.log('Setting log data:', responseText);
+                                setLogData(responseText);
+                                setIsLoadingLogs(false);
+                                console.log('Log data state updated');
+                            }
+                            // Handle ping response (object with response property)
+                            else if (responseJson.response === 'pong') {
+                                console.log('Ping response:', responseJson);
+                                setError(null);
+                            }
+                        } catch {
+                            // Not valid JSON - shouldn't happen
+                            console.error('Received non-JSON response:', responseText);
+                        }
+                    }
+                } catch (err) {
+                    console.error('Error handling command response:', err);
+                }
+            });
+
             // Update connection state
             setConnection({
                 device,
@@ -130,21 +176,19 @@ const BluetoothPage = (props: BluetoothProps) => {
 
             setConnectionStatus("Connected");
 
-            // Request initial status
-            const initialStatus = async () => {
-                if (statusChar) {
-                    try {
-                        const value = await statusChar.readValue();
-                        const statusJson = new TextDecoder().decode(value);
-                        const status = JSON.parse(statusJson) as BootBootsSystemStatus;
-                        setSystemStatus(status);
-                        setLastUpdate(new Date());
-                    } catch (err) {
-                        console.error('Error reading initial status:', err);
-                    }
-                }
-            };
-            await initialStatus();
+            // // Request initial status after a delay to avoid GATT operation conflicts
+            // setTimeout(async () => {
+            //     try {
+            //         const value = await statusChar.readValue();
+            //         const statusJson = new TextDecoder().decode(value);
+            //         const status = JSON.parse(statusJson) as BootBootsSystemStatus;
+            //         setSystemStatus(status);
+            //         setLastUpdate(new Date());
+            //     } catch (err) {
+            //         console.error('Error reading initial status:', err);
+            //         // Don't set error - status will come via notifications
+            //     }
+            // }, 1000);
 
         } catch (err) {
             console.error('Error connecting to BootBoots:', err);
@@ -175,7 +219,7 @@ const BluetoothPage = (props: BluetoothProps) => {
     // Request current status
     const requestStatus = useCallback(async () => {
         if (!connection.statusCharacteristic) return;
-        
+
         try {
             const value = await connection.statusCharacteristic.readValue();
             const statusJson = new TextDecoder().decode(value);
@@ -188,24 +232,39 @@ const BluetoothPage = (props: BluetoothProps) => {
         }
     }, [connection.statusCharacteristic]);
 
-    // Request logs
+    // Request logs - sends command and waits for notification response
     const requestLogs = useCallback(async () => {
-        if (!connection.logsCharacteristic) return;
-        
-        try {
-            const value = await connection.logsCharacteristic.readValue();
-            const logsJson = new TextDecoder().decode(value);
-            setLogData(logsJson);
-        } catch (err) {
-            console.error('Error reading logs:', err);
-            setError('Failed to read logs');
+        if (!connection.commandCharacteristic) {
+            console.log('No command characteristic available');
+            return;
         }
-    }, [connection.logsCharacteristic]);
+
+        setIsLoadingLogs(true);
+        setError(null);
+
+        try {
+            console.log('Sending request_logs command...');
+            const command = JSON.stringify({ command: "request_logs" });
+            const encoder = new TextEncoder();
+            await connection.commandCharacteristic.writeValue(encoder.encode(command));
+            console.log('Command sent, waiting for notification response...');
+
+            // Set a timeout to reset loading state if no response comes
+            setTimeout(() => {
+                console.log('Timeout waiting for log response');
+                setIsLoadingLogs(false);
+            }, 5000);
+        } catch (err) {
+            console.error('Error sending request_logs:', err);
+            setError(`Failed to request logs: ${err}`);
+            setIsLoadingLogs(false);
+        }
+    }, [connection.commandCharacteristic]);
 
     // Send ping command
     const sendPing = useCallback(async () => {
         if (!connection.commandCharacteristic) return;
-        
+
         try {
             const command = JSON.stringify({ command: "ping" });
             const encoder = new TextEncoder();
@@ -230,17 +289,17 @@ const BluetoothPage = (props: BluetoothProps) => {
                 <h1>BootBoots Cat Territory Management</h1>
                 <h3>Bluetooth Remote Monitoring</h3>
                 {children}
-                
+
                 {/* Connection Controls */}
                 <div className="connection-controls">
                     <p><strong>Status:</strong> {connectionStatus}</p>
                     {connection.device && (
                         <p><strong>Device:</strong> {connection.device.name} ({connection.device.id})</p>
                     )}
-                    
+
                     {!connection.device ? (
-                        <button 
-                            type="button" 
+                        <button
+                            type="button"
                             className="btn btn-primary"
                             onClick={connectToBootBoots}
                             disabled={connectionStatus === "Connecting..."}
@@ -249,31 +308,32 @@ const BluetoothPage = (props: BluetoothProps) => {
                         </button>
                     ) : (
                         <div>
-                            <button 
-                                type="button" 
+                            <button
+                                type="button"
                                 className="btn btn-secondary"
                                 onClick={disconnect}
                             >
                                 Disconnect
                             </button>
-                            <button 
-                                type="button" 
+                            <button
+                                type="button"
                                 className="btn btn-info"
                                 onClick={requestStatus}
                                 style={{ marginLeft: '10px' }}
                             >
                                 Refresh Status
                             </button>
-                            <button 
-                                type="button" 
+                            <button
+                                type="button"
                                 className="btn btn-info"
                                 onClick={requestLogs}
+                                disabled={isLoadingLogs}
                                 style={{ marginLeft: '10px' }}
                             >
-                                Get Logs
+                                {isLoadingLogs ? 'Loading...' : 'Get Logs'}
                             </button>
-                            <button 
-                                type="button" 
+                            <button
+                                type="button"
                                 className="btn btn-success"
                                 onClick={sendPing}
                                 style={{ marginLeft: '10px' }}
@@ -298,7 +358,7 @@ const BluetoothPage = (props: BluetoothProps) => {
                         {lastUpdate && (
                             <p><em>Last updated: {lastUpdate.toLocaleTimeString()}</em></p>
                         )}
-                        
+
                         <div className="status-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
                             <div className="system-info">
                                 <h3>System Information</h3>
@@ -310,7 +370,7 @@ const BluetoothPage = (props: BluetoothProps) => {
                                 <p><strong>I2C Ready:</strong> {systemStatus.system.i2c_ready ? '✅' : '❌'}</p>
                                 <p><strong>Atomizer Enabled:</strong> {systemStatus.system.atomizer_enabled ? '✅' : '❌'}</p>
                             </div>
-                            
+
                             <div className="statistics">
                                 <h3>Detection Statistics</h3>
                                 <p><strong>Total Detections:</strong> {systemStatus.statistics.total_detections}</p>
@@ -325,15 +385,26 @@ const BluetoothPage = (props: BluetoothProps) => {
                 {/* Log Data Display */}
                 {logData && (
                     <div className="log-data" style={{ marginTop: '20px' }}>
-                        <h2>Log Data</h2>
-                        <pre style={{ 
-                            background: '#f5f5f5', 
-                            padding: '10px', 
-                            borderRadius: '5px', 
+                        <h2>Recent Log Entries</h2>
+                        <pre style={{
+                            background: '#2a2a2a',
+                            color: '#e0e0e0',
+                            padding: '10px',
+                            borderRadius: '5px',
                             overflow: 'auto',
-                            maxHeight: '300px'
+                            maxHeight: '300px',
+                            whiteSpace: 'pre-wrap',
+                            fontFamily: 'monospace',
+                            fontSize: '12px'
                         }}>
-                            {logData}
+                            {(() => {
+                                try {
+                                    const logs = JSON.parse(logData);
+                                    return logs.join('\n');
+                                } catch {
+                                    return logData;
+                                }
+                            })()}
                         </pre>
                     </div>
                 )}
