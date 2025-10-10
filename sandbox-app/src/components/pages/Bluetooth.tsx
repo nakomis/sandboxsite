@@ -70,6 +70,7 @@ const BluetoothPage = (props: BluetoothProps) => {
     const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [isLoadingLogs, setIsLoadingLogs] = useState<boolean>(false);
+    const [logChunks, setLogChunks] = useState<string[]>([]);
 
     // Debug: Log when logData changes
     useEffect(() => {
@@ -141,9 +142,26 @@ const BluetoothPage = (props: BluetoothProps) => {
                         try {
                             const responseJson = JSON.parse(responseText);
 
-                            // Check if it's an array (log data)
-                            if (Array.isArray(responseJson)) {
-                                console.log('Log data received via notification (array)');
+                            // Handle chunked log data
+                            if (responseJson.type === 'log_chunk') {
+                                console.log(`Received log chunk ${responseJson.chunk}/${responseJson.total}`);
+                                setLogChunks(prev => [...prev, responseJson.data]);
+                            }
+                            // Handle log transfer completion
+                            else if (responseJson.type === 'logs_complete') {
+                                console.log(`Log transfer complete: ${responseJson.total_chunks} chunks, ${responseJson.total_bytes} bytes`);
+                                // Reassemble all chunks into complete log data
+                                setLogChunks(chunks => {
+                                    const fullLogData = chunks.join('');
+                                    setLogData(fullLogData);
+                                    console.log('Log data reassembled and set:', fullLogData.substring(0, 100) + '...');
+                                    return []; // Clear chunks
+                                });
+                                setIsLoadingLogs(false);
+                            }
+                            // Check if it's an array (legacy single-notification log data)
+                            else if (Array.isArray(responseJson)) {
+                                console.log('Log data received via notification (array - legacy mode)');
                                 console.log('Setting log data:', responseText);
                                 setLogData(responseText);
                                 setIsLoadingLogs(false);
@@ -351,6 +369,34 @@ const BluetoothPage = (props: BluetoothProps) => {
                     </div>
                 )}
 
+                {/* Log Data Display */}
+                {logData && (
+                    <div className="log-data" style={{ marginTop: '20px' }}>
+                        <h2>Recent Log Entries</h2>
+                        <pre style={{
+                            background: '#2a2a2a',
+                            color: '#e0e0e0',
+                            padding: '10px',
+                            borderRadius: '5px',
+                            overflow: 'auto',
+                            maxHeight: '300px',
+                            whiteSpace: 'pre-wrap',
+                            fontFamily: 'monospace',
+                            fontSize: '12px',
+                            textAlign: 'left'
+                        }}>
+                            {(() => {
+                                try {
+                                    const logs = JSON.parse(logData);
+                                    return logs.join('\n');
+                                } catch {
+                                    return logData;
+                                }
+                            })()}
+                        </pre>
+                    </div>
+                )}
+
                 {/* System Status Display */}
                 {systemStatus && (
                     <div className="system-status" style={{ marginTop: '20px' }}>
@@ -379,33 +425,6 @@ const BluetoothPage = (props: BluetoothProps) => {
                                 <p><strong>False Positives Avoided:</strong> {systemStatus.statistics.false_positives_avoided}</p>
                             </div>
                         </div>
-                    </div>
-                )}
-
-                {/* Log Data Display */}
-                {logData && (
-                    <div className="log-data" style={{ marginTop: '20px' }}>
-                        <h2>Recent Log Entries</h2>
-                        <pre style={{
-                            background: '#2a2a2a',
-                            color: '#e0e0e0',
-                            padding: '10px',
-                            borderRadius: '5px',
-                            overflow: 'auto',
-                            maxHeight: '300px',
-                            whiteSpace: 'pre-wrap',
-                            fontFamily: 'monospace',
-                            fontSize: '12px'
-                        }}>
-                            {(() => {
-                                try {
-                                    const logs = JSON.parse(logData);
-                                    return logs.join('\n');
-                                } catch {
-                                    return logData;
-                                }
-                            })()}
-                        </pre>
                     </div>
                 )}
             </div>

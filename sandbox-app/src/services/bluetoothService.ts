@@ -44,10 +44,10 @@ export class BluetoothService {
 
             // Connect to GATT server
             this.server = await this.device.gatt.connect();
-            
+
             // Get OTA service
             this.otaService = await this.server.getPrimaryService(this.OTA_SERVICE_UUID);
-            
+
             // Get characteristics
             this.commandCharacteristic = await this.otaService.getCharacteristic(this.OTA_COMMAND_CHAR_UUID);
             this.statusCharacteristic = await this.otaService.getCharacteristic(this.OTA_STATUS_CHAR_UUID);
@@ -55,8 +55,19 @@ export class BluetoothService {
             // Set up disconnect handler
             this.device.addEventListener('gattserverdisconnected', this.onDisconnected.bind(this));
 
-            // Read initial status to get current version
+            // Try to get version - if it fails, send a get_status command to trigger a response
             await this.refreshVersion();
+
+            // If we still don't have a version, try sending get_status command
+            if (this.currentVersion === 'Unknown') {
+                try {
+                    const status = await this.getStatus();
+                    this.currentVersion = status.version || 'Unknown';
+                } catch {
+                    // Version will remain Unknown
+                    console.warn('Could not retrieve version from device');
+                }
+            }
 
             console.log('Connected to BootBoots device:', this.device.name);
         } catch (error) {
@@ -70,8 +81,16 @@ export class BluetoothService {
      */
     private async refreshVersion(): Promise<void> {
         try {
-            const status = await this.getStatus();
-            this.currentVersion = status.version || 'Unknown';
+            // Read the status characteristic directly to get current version
+            if (this.statusCharacteristic) {
+                const response = await this.statusCharacteristic.readValue();
+                const decoder = new TextDecoder();
+                const responseString = decoder.decode(response);
+                const status: OTAResponse = JSON.parse(responseString);
+                this.currentVersion = status.version || 'Unknown';
+            } else {
+                this.currentVersion = 'Unknown';
+            }
         } catch (error) {
             console.warn('Failed to get version from device:', error);
             this.currentVersion = 'Unknown';
@@ -147,7 +166,7 @@ export class BluetoothService {
      * Get current status from ESP32
      */
     async getStatus(): Promise<OTAResponse> {
-        if (!this.commandCharacteristic) {
+        if (!this.commandCharacteristic || !this.statusCharacteristic) {
             throw new Error('Not connected to device');
         }
 
@@ -156,22 +175,43 @@ export class BluetoothService {
         };
 
         try {
+            // Set up a promise that will resolve when we get a notification response
+            const statusPromise = new Promise<OTAResponse>((resolve, reject) => {
+                const timeout = setTimeout(() => {
+                    reject(new Error('Timeout waiting for status response'));
+                }, 5000);
+
+                const handler = (event: Event) => {
+                    const target = event.target as BluetoothRemoteGATTCharacteristic;
+                    const decoder = new TextDecoder();
+                    const responseString = decoder.decode(target.value!);
+
+                    try {
+                        const response: OTAResponse = JSON.parse(responseString);
+                        clearTimeout(timeout);
+                        this.statusCharacteristic!.removeEventListener('characteristicvaluechanged', handler);
+                        resolve(response);
+                    } catch (error) {
+                        console.error('Failed to parse status response:', error);
+                    }
+                };
+
+                this.statusCharacteristic!.addEventListener('characteristicvaluechanged', handler);
+            });
+
+            // Enable notifications if not already enabled
+            if (!this.statusCharacteristic.properties.notify) {
+                await this.statusCharacteristic.startNotifications();
+            }
+
+            // Send the command
             const commandString = JSON.stringify(command);
             const encoder = new TextEncoder();
             const data = encoder.encode(commandString);
-
             await this.commandCharacteristic.writeValue(data);
 
-            // Read status response
-            if (this.statusCharacteristic) {
-                const response = await this.statusCharacteristic.readValue();
-                const decoder = new TextDecoder();
-                const responseString = decoder.decode(response);
-                
-                return JSON.parse(responseString) as OTAResponse;
-            }
-
-            throw new Error('Status characteristic not available');
+            // Wait for the notification response
+            return await statusPromise;
         } catch (error) {
             console.error('Failed to get status:', error);
             throw new Error(`Failed to get device status: ${error}`);
