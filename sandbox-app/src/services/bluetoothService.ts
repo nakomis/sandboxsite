@@ -154,8 +154,15 @@ export class BluetoothService {
 
             console.log(`Sending OTA command (${data.length} bytes):`, command);
 
-            await this.commandCharacteristic.writeValue(data);
-            console.log('OTA command sent successfully');
+            // Use writeValueWithoutResponse for better reliability with large payloads
+            // This matches the PROPERTY_WRITE_NR property on the ESP32 side
+            if (this.commandCharacteristic.properties.writeWithoutResponse) {
+                await this.commandCharacteristic.writeValueWithoutResponse(data);
+                console.log('OTA command sent successfully (writeWithoutResponse)');
+            } else {
+                await this.commandCharacteristic.writeValue(data);
+                console.log('OTA command sent successfully (writeValue)');
+            }
         } catch (error) {
             console.error('Failed to send OTA command:', error);
             throw new Error(`Failed to send OTA command: ${error}`);
