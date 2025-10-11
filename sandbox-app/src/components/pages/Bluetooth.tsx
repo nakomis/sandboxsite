@@ -72,10 +72,10 @@ const BluetoothPage = (props: BluetoothProps) => {
     const [isLoadingLogs, setIsLoadingLogs] = useState<boolean>(false);
     const [logChunks, setLogChunks] = useState<string[]>([]);
 
-    // Debug: Log when logData changes
-    useEffect(() => {
-        console.log('logData state changed:', logData);
-    }, [logData]);
+    // // Debug: Log when logData changes
+    // useEffect(() => {
+    //     console.log('logData state changed:', logData);
+    // }, [logData]);
 
     // Handle status characteristic notifications
     const handleStatusUpdate = useCallback(async (event: Event) => {
@@ -145,7 +145,10 @@ const BluetoothPage = (props: BluetoothProps) => {
                             // Handle chunked log data
                             if (responseJson.type === 'log_chunk') {
                                 console.log(`Received log chunk ${responseJson.chunk}/${responseJson.total}`);
-                                setLogChunks(prev => [...prev, responseJson.data]);
+                                var chunks = [...logChunks, responseJson.data];
+                                setLogChunks(chunks);
+                                const fullLogData = chunks.join('');
+                                setLogData(fullLogData);
                             }
                             // Handle log transfer completion
                             else if (responseJson.type === 'logs_complete') {
@@ -262,16 +265,16 @@ const BluetoothPage = (props: BluetoothProps) => {
 
         try {
             console.log('Sending request_logs command...');
-            const command = JSON.stringify({ command: "request_logs" });
+            const command = JSON.stringify({ command: "request_logs", entries: 150 });
             const encoder = new TextEncoder();
-            await connection.commandCharacteristic.writeValue(encoder.encode(command));
-            console.log('Command sent, waiting for notification response...');
+            connection.commandCharacteristic.writeValue(encoder.encode(command));
+            console.log(`Command sent: ${command}, waiting for notification response...`);
 
-            // Set a timeout to reset loading state if no response comes
-            setTimeout(() => {
-                console.log('Timeout waiting for log response');
-                setIsLoadingLogs(false);
-            }, 5000);
+            // // Set a timeout to reset loading state if no response comes
+            // setTimeout(() => {
+            //     console.log('Timeout waiting for log response');
+            //     setIsLoadingLogs(false);
+            // }, 5000);
         } catch (err) {
             console.error('Error sending request_logs:', err);
             setError(`Failed to request logs: ${err}`);
