@@ -190,6 +190,7 @@ const FirmwareManager: React.FC<FirmwareManagerProps> = ({ ...pageProps }) => {
             });
 
             // Send OTA update command to ESP32
+            console.log('Sending OTA command to device with URL:', downloadUrl);
             await bluetoothService.sendOTACommand(downloadUrl, selectedVersion);
 
             setUpdateStatus('Update initiated - waiting for device...');

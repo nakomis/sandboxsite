@@ -145,9 +145,12 @@ const BluetoothPage = (props: BluetoothProps) => {
                             // Handle chunked log data
                             if (responseJson.type === 'log_chunk') {
                                 console.log(`Received log chunk ${responseJson.chunk}/${responseJson.total}`);
+                                console.log(logChunks);
                                 var chunks = [...logChunks, responseJson.data];
                                 setLogChunks(chunks);
+                                console.log(logChunks);
                                 const fullLogData = chunks.join('');
+                                console.log(logChunks);
                                 setLogData(fullLogData);
                             }
                             // Handle log transfer completion
@@ -265,7 +268,7 @@ const BluetoothPage = (props: BluetoothProps) => {
 
         try {
             console.log('Sending request_logs command...');
-            const command = JSON.stringify({ command: "request_logs", entries: 150 });
+            const command = JSON.stringify({ command: "request_logs" });
             const encoder = new TextEncoder();
             connection.commandCharacteristic.writeValue(encoder.encode(command));
             console.log(`Command sent: ${command}, waiting for notification response...`);

@@ -1,7 +1,10 @@
 interface OTACommand {
-    action: 'ota_update' | 'get_status' | 'cancel_update';
+    action: 'ota_update' | 'get_status' | 'cancel_update' | 'url_chunk';
     firmware_url?: string;
     version?: string;
+    chunk_index?: number;
+    total_chunks?: number;
+    chunk_data?: string;
 }
 
 interface OTAResponse {
@@ -134,39 +137,102 @@ export class BluetoothService {
     }
 
     /**
-     * Send OTA update command to ESP32
+     * Send OTA update command to ESP32 (with automatic chunking for long URLs)
      */
     async sendOTACommand(firmwareUrl: string, version: string): Promise<void> {
         if (!this.commandCharacteristic) {
             throw new Error('Not connected to device');
         }
 
+        const encoder = new TextEncoder();
+
+        // Try sending as a single command first
         const command: OTACommand = {
             action: 'ota_update',
             firmware_url: firmwareUrl,
             version: version
         };
 
-        try {
-            const commandString = JSON.stringify(command);
-            const encoder = new TextEncoder();
+        const commandString = JSON.stringify(command);
+        const data = encoder.encode(commandString);
+
+        console.log(`OTA command size: ${data.length} bytes`);
+
+        // If the command fits in a single packet (< 512 bytes), send it directly
+        if (data.length <= 512) {
+            try {
+                console.log('Sending OTA command in single packet:', command);
+                if (this.commandCharacteristic.properties.writeWithoutResponse) {
+                    await this.commandCharacteristic.writeValueWithoutResponse(data);
+                } else {
+                    await this.commandCharacteristic.writeValue(data);
+                }
+                console.log('OTA command sent successfully');
+                return;
+            } catch (error) {
+                console.error('Failed to send OTA command:', error);
+                throw new Error(`Failed to send OTA command: ${error}`);
+            }
+        }
+
+        // Command is too large - send URL in chunks
+        console.log('URL too long for single packet, using chunked transfer');
+        await this.sendUrlInChunks(firmwareUrl, version);
+    }
+
+    /**
+     * Send firmware URL in chunks to avoid BLE packet size limits
+     */
+    private async sendUrlInChunks(firmwareUrl: string, version: string): Promise<void> {
+        if (!this.commandCharacteristic) {
+            throw new Error('Not connected to device');
+        }
+
+        const encoder = new TextEncoder();
+
+        // Reserve space for JSON overhead: {"action":"url_chunk","chunk_index":999,"total_chunks":999,"chunk_data":"","version":"1.0.11"}
+        // Approximately 100 bytes overhead, so we can use ~400 bytes per chunk to stay under 512
+        const CHUNK_SIZE = 400;
+        const chunks: string[] = [];
+
+        // Split URL into chunks
+        for (let i = 0; i < firmwareUrl.length; i += CHUNK_SIZE) {
+            chunks.push(firmwareUrl.substring(i, i + CHUNK_SIZE));
+        }
+
+        console.log(`Sending URL in ${chunks.length} chunks (${firmwareUrl.length} bytes total)`);
+
+        // Send each chunk
+        for (let i = 0; i < chunks.length; i++) {
+            const chunkCommand: OTACommand = {
+                action: 'url_chunk',
+                chunk_index: i,
+                total_chunks: chunks.length,
+                chunk_data: chunks[i],
+                version: version
+            };
+
+            const commandString = JSON.stringify(chunkCommand);
             const data = encoder.encode(commandString);
 
-            console.log(`Sending OTA command (${data.length} bytes):`, command);
+            console.log(`Sending chunk ${i + 1}/${chunks.length} (${data.length} bytes)`);
 
-            // Use writeValueWithoutResponse for better reliability with large payloads
-            // This matches the PROPERTY_WRITE_NR property on the ESP32 side
-            if (this.commandCharacteristic.properties.writeWithoutResponse) {
-                await this.commandCharacteristic.writeValueWithoutResponse(data);
-                console.log('OTA command sent successfully (writeWithoutResponse)');
-            } else {
-                await this.commandCharacteristic.writeValue(data);
-                console.log('OTA command sent successfully (writeValue)');
+            try {
+                if (this.commandCharacteristic.properties.writeWithoutResponse) {
+                    await this.commandCharacteristic.writeValueWithoutResponse(data);
+                } else {
+                    await this.commandCharacteristic.writeValue(data);
+                }
+
+                // Small delay between chunks to ensure reliable reception
+                await new Promise(resolve => setTimeout(resolve, 50));
+            } catch (error) {
+                console.error(`Failed to send chunk ${i + 1}:`, error);
+                throw new Error(`Failed to send URL chunk ${i + 1}/${chunks.length}: ${error}`);
             }
-        } catch (error) {
-            console.error('Failed to send OTA command:', error);
-            throw new Error(`Failed to send OTA command: ${error}`);
         }
+
+        console.log('All URL chunks sent successfully');
     }
 
     /**
