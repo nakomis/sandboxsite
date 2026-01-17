@@ -165,9 +165,12 @@ export class FirmwareService {
     }
 
     /**
-     * Get firmware download URL (public URL for ESP32 access)
+     * Get firmware download URL (signed HTTPS URL for ESP32 access)
+     * ESP32 will shutdown BLE to free memory for HTTPS/TLS
      */
-    async getFirmwareDownloadUrl(projectName: string, version: string, creds: any): Promise<string> {
+    async getFirmwareDownloadUrl(projectName: string, version: string, creds: any, expiresIn: number = 3600): Promise<string> {
+        this.initializeS3Client(creds);
+
         const versions = await this.getAvailableFirmwareVersions(projectName, creds);
         const firmware = versions.find(v => v.version === version);
 
@@ -175,10 +178,9 @@ export class FirmwareService {
             throw new Error(`Firmware version ${version} not found`);
         }
 
-        // Return direct public URL instead of signed URL
-        // Bucket policy allows public read access to firmware files
-        // NOTE: Using HTTP instead of HTTPS to avoid TLS memory issues on ESP32
-        return `http://${this.bucketName}.s3.${this.region}.amazonaws.com/${firmware.firmware_path}`;
+        // Generate signed HTTPS URL for secure firmware download
+        // ESP32 will deinitialize BLE before download to free ~40KB for TLS
+        return await this.generateSignedUrl(firmware.firmware_path, expiresIn);
     }
 }
 
