@@ -61,5 +61,17 @@ export class CloudfrontStack extends cdk.Stack {
             zone: hostedZone,
             target: route53.RecordTarget.fromAlias(new targets.CloudFrontTarget(this.distribution))
         });
+
+        new cdk.CfnOutput(this, 'SandboxSiteBucketName', {
+            value: this.bucket.bucketName,
+            description: 'Name of the Sandbox Site S3 bucket',
+            exportName: 'SandboxSiteBucketName'
+        });
+
+        new cdk.CfnOutput(this, 'SandboxSiteDistributionId', {
+            value: this.distribution.distributionId,
+            description: 'ID of the Sandbox Site Cloudfront Distribution',
+            exportName: 'SandboxSiteDistributionId'
+        });
     }
 }
