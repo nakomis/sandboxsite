@@ -145,20 +145,19 @@ const BluetoothPage = (props: BluetoothProps) => {
                             // Handle chunked log data
                             if (responseJson.type === 'log_chunk') {
                                 console.log(`Received log chunk ${responseJson.chunk}/${responseJson.total}`);
-                                console.log(logChunks);
-                                var chunks = [...logChunks, responseJson.data];
-                                setLogChunks(chunks);
-                                console.log(logChunks);
-                                const fullLogData = chunks.join('');
-                                console.log(logChunks);
-                                setLogData(fullLogData);
+                                // Use functional update to avoid stale closure issue
+                                setLogChunks(prevChunks => {
+                                    const newChunks = [...prevChunks, responseJson.data];
+                                    setLogData(newChunks.join('\n'));
+                                    return newChunks;
+                                });
                             }
                             // Handle log transfer completion
                             else if (responseJson.type === 'logs_complete') {
                                 console.log(`Log transfer complete: ${responseJson.total_chunks} chunks, ${responseJson.total_bytes} bytes`);
                                 // Reassemble all chunks into complete log data
                                 setLogChunks(chunks => {
-                                    const fullLogData = chunks.join('');
+                                    const fullLogData = chunks.join('\n');
                                     setLogData(fullLogData);
                                     console.log('Log data reassembled and set:', fullLogData.substring(0, 100) + '...');
                                     return []; // Clear chunks
