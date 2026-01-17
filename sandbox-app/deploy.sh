@@ -14,9 +14,9 @@ npm run build
 # Get AWS resources from CloudFormation
 echo "🔍 Getting AWS resources from CloudFormation..."
 BUCKET_NAME=$(aws cloudformation describe-stacks --stack-name SandboxCloudfrontStack \
-  --query 'Stacks[0].Outputs[?OutputKey==`BucketName`].OutputValue' --output text)
+  --query 'Stacks[0].Outputs[?OutputKey==`SandboxSiteBucketName`].OutputValue' --output text)
 DISTRIBUTION_ID=$(aws cloudformation describe-stacks --stack-name SandboxCloudfrontStack \
-  --query 'Stacks[0].Outputs[?OutputKey==`DistributionId`].OutputValue' --output text)
+  --query 'Stacks[0].Outputs[?OutputKey==`SandboxSiteDistributionId`].OutputValue' --output text)
 
 if [ -z "$BUCKET_NAME" ] || [ -z "$DISTRIBUTION_ID" ]; then
     echo "❌ Error: Could not retrieve AWS resources from CloudFormation"
