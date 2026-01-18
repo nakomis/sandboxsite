@@ -81,10 +81,34 @@ const BluetoothPage = (props: BluetoothProps) => {
     const [imageChunks, setImageChunks] = useState<string[]>([]);
     const [imageProgress, setImageProgress] = useState<{ current: number; total: number } | null>(null);
 
+    // Previously paired devices state
+    const [pairedDevices, setPairedDevices] = useState<BluetoothDevice[]>([]);
+    const [isReconnecting, setIsReconnecting] = useState<boolean>(false);
+
     // // Debug: Log when logData changes
     // useEffect(() => {
     //     console.log('logData state changed:', logData);
     // }, [logData]);
+
+    // Check for previously paired devices on mount
+    useEffect(() => {
+        const checkPairedDevices = async () => {
+            // Check if getDevices is supported (Chrome 85+, experimental)
+            if ('bluetooth' in navigator && 'getDevices' in navigator.bluetooth) {
+                try {
+                    const devices = await navigator.bluetooth.getDevices();
+                    const bootbootsDevices = devices.filter(d =>
+                        d.name?.startsWith('BootBoots')
+                    );
+                    setPairedDevices(bootbootsDevices);
+                    console.log('Found previously paired devices:', bootbootsDevices.map(d => d.name));
+                } catch (err) {
+                    console.log('Could not get paired devices:', err);
+                }
+            }
+        };
+        checkPairedDevices();
+    }, []);
 
     // Handle status characteristic notifications
     const handleStatusUpdate = useCallback(async (event: Event) => {
@@ -284,6 +308,115 @@ const BluetoothPage = (props: BluetoothProps) => {
         setLastUpdate(null);
     }, [connection.server]);
 
+    // Reconnect to a previously paired device
+    const reconnectToDevice = useCallback(async (device: BluetoothDevice) => {
+        try {
+            setIsReconnecting(true);
+            setConnectionStatus("Reconnecting...");
+            setError(null);
+
+            console.log('Attempting to reconnect to:', device.name);
+
+            // Connect to GATT server
+            const server = await device.gatt!.connect();
+            console.log('Reconnected to GATT Server');
+
+            // Get primary service
+            const service = await server.getPrimaryService(BOOTBOOTS_SERVICE_UUID);
+            console.log('Got BootBoots service');
+
+            // Get characteristics
+            const statusChar = await service.getCharacteristic(STATUS_CHARACTERISTIC_UUID);
+            const logsChar = await service.getCharacteristic(LOGS_CHARACTERISTIC_UUID);
+            const commandChar = await service.getCharacteristic(COMMAND_CHARACTERISTIC_UUID);
+
+            // Start notifications for status updates
+            await statusChar.startNotifications();
+            statusChar.addEventListener('characteristicvaluechanged', handleStatusUpdate);
+
+            // Start notifications for command responses
+            await commandChar.startNotifications();
+            commandChar.addEventListener('characteristicvaluechanged', async (event) => {
+                try {
+                    const characteristic = event.target as BluetoothRemoteGATTCharacteristic;
+                    const value = characteristic.value;
+                    if (value) {
+                        const responseText = new TextDecoder().decode(value);
+                        console.log('Command response received:', responseText);
+
+                        try {
+                            const responseJson = JSON.parse(responseText);
+
+                            if (responseJson.type === 'log_chunk') {
+                                setLogChunks(prevChunks => {
+                                    const newChunks = [...prevChunks, responseJson.data];
+                                    setLogData(newChunks.join('\n'));
+                                    return newChunks;
+                                });
+                            } else if (responseJson.type === 'logs_complete') {
+                                setLogChunks(chunks => {
+                                    const fullLogData = chunks.join('\n');
+                                    setLogData(fullLogData);
+                                    return [];
+                                });
+                                setIsLoadingLogs(false);
+                            } else if (Array.isArray(responseJson)) {
+                                setLogData(responseText);
+                                setIsLoadingLogs(false);
+                            } else if (responseJson.response === 'pong') {
+                                setError(null);
+                            } else if (responseJson.type === 'image_list') {
+                                setImageList(responseJson.images || []);
+                                setIsLoadingImages(false);
+                            } else if (responseJson.type === 'image_start') {
+                                setImageChunks([]);
+                                setImageProgress({ current: 0, total: 0 });
+                            } else if (responseJson.type === 'image_chunk') {
+                                setImageChunks(prev => [...prev, responseJson.data]);
+                                setImageProgress({ current: responseJson.chunk + 1, total: responseJson.total });
+                            } else if (responseJson.type === 'image_complete') {
+                                setImageChunks(chunks => {
+                                    const base64Data = chunks.join('');
+                                    setCurrentImage(`data:image/jpeg;base64,${base64Data}`);
+                                    setIsLoadingImage(false);
+                                    setImageProgress(null);
+                                    return [];
+                                });
+                            } else if (responseJson.type === 'error') {
+                                setError(responseJson.message);
+                                setIsLoadingImage(false);
+                                setIsLoadingImages(false);
+                            }
+                        } catch {
+                            console.error('Received non-JSON response:', responseText);
+                        }
+                    }
+                } catch (err) {
+                    console.error('Error handling command response:', err);
+                }
+            });
+
+            // Update connection state
+            setConnection({
+                device,
+                server,
+                service,
+                statusCharacteristic: statusChar,
+                logsCharacteristic: logsChar,
+                commandCharacteristic: commandChar
+            });
+
+            setConnectionStatus("Connected");
+            setIsReconnecting(false);
+
+        } catch (err) {
+            console.error('Error reconnecting to BootBoots:', err);
+            setError(`Reconnection failed: ${err}`);
+            setConnectionStatus("Disconnected");
+            setIsReconnecting(false);
+        }
+    }, [handleStatusUpdate]);
+
     // Request current status
     const requestStatus = useCallback(async () => {
         if (!connection.statusCharacteristic) return;
@@ -416,14 +549,37 @@ const BluetoothPage = (props: BluetoothProps) => {
                     )}
 
                     {!connection.device ? (
-                        <button
-                            type="button"
-                            className="btn btn-primary"
-                            onClick={connectToBootBoots}
-                            disabled={connectionStatus === "Connecting..."}
-                        >
-                            {connectionStatus === "Connecting..." ? "Connecting..." : "Connect to BootBoots"}
-                        </button>
+                        <div>
+                            <button
+                                type="button"
+                                className="btn btn-primary"
+                                onClick={connectToBootBoots}
+                                disabled={connectionStatus === "Connecting..." || isReconnecting}
+                            >
+                                {connectionStatus === "Connecting..." ? "Connecting..." : "Connect to BootBoots"}
+                            </button>
+
+                            {/* Show reconnect options for previously paired devices */}
+                            {pairedDevices.length > 0 && (
+                                <div style={{ marginTop: '15px' }}>
+                                    <p style={{ marginBottom: '8px', color: '#888' }}>
+                                        <strong>Previously paired devices:</strong>
+                                    </p>
+                                    {pairedDevices.map((device) => (
+                                        <button
+                                            key={device.id}
+                                            type="button"
+                                            className="btn btn-outline-primary"
+                                            onClick={() => reconnectToDevice(device)}
+                                            disabled={isReconnecting}
+                                            style={{ marginRight: '10px', marginBottom: '5px' }}
+                                        >
+                                            {isReconnecting ? "Reconnecting..." : `Reconnect to ${device.name}`}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
                     ) : (
                         <div>
                             <button
