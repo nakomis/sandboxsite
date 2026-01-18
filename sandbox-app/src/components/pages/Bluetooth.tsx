@@ -72,6 +72,15 @@ const BluetoothPage = (props: BluetoothProps) => {
     const [isLoadingLogs, setIsLoadingLogs] = useState<boolean>(false);
     const [logChunks, setLogChunks] = useState<string[]>([]);
 
+    // Image state
+    const [imageList, setImageList] = useState<string[]>([]);
+    const [selectedImage, setSelectedImage] = useState<string>("");
+    const [isLoadingImages, setIsLoadingImages] = useState<boolean>(false);
+    const [isLoadingImage, setIsLoadingImage] = useState<boolean>(false);
+    const [currentImage, setCurrentImage] = useState<string | null>(null);
+    const [imageChunks, setImageChunks] = useState<string[]>([]);
+    const [imageProgress, setImageProgress] = useState<{ current: number; total: number } | null>(null);
+
     // // Debug: Log when logData changes
     // useEffect(() => {
     //     console.log('logData state changed:', logData);
@@ -176,6 +185,42 @@ const BluetoothPage = (props: BluetoothProps) => {
                             else if (responseJson.response === 'pong') {
                                 console.log('Ping response:', responseJson);
                                 setError(null);
+                            }
+                            // Handle image list response
+                            else if (responseJson.type === 'image_list') {
+                                console.log('Image list received:', responseJson.images);
+                                setImageList(responseJson.images || []);
+                                setIsLoadingImages(false);
+                            }
+                            // Handle image transfer start
+                            else if (responseJson.type === 'image_start') {
+                                console.log(`Image transfer starting: ${responseJson.filename} (${responseJson.size} bytes)`);
+                                setImageChunks([]);
+                                setImageProgress({ current: 0, total: 0 });
+                            }
+                            // Handle image chunk
+                            else if (responseJson.type === 'image_chunk') {
+                                setImageChunks(prev => [...prev, responseJson.data]);
+                                setImageProgress({ current: responseJson.chunk + 1, total: responseJson.total });
+                            }
+                            // Handle image transfer complete
+                            else if (responseJson.type === 'image_complete') {
+                                console.log(`Image transfer complete: ${responseJson.chunks} chunks`);
+                                // Reassemble image from base64 chunks
+                                setImageChunks(chunks => {
+                                    const base64Data = chunks.join('');
+                                    setCurrentImage(`data:image/jpeg;base64,${base64Data}`);
+                                    setIsLoadingImage(false);
+                                    setImageProgress(null);
+                                    return [];
+                                });
+                            }
+                            // Handle error response
+                            else if (responseJson.type === 'error') {
+                                console.error('Error from device:', responseJson.message);
+                                setError(responseJson.message);
+                                setIsLoadingImage(false);
+                                setIsLoadingImages(false);
                             }
                         } catch {
                             // Not valid JSON - shouldn't happen
@@ -298,6 +343,56 @@ const BluetoothPage = (props: BluetoothProps) => {
         }
     }, [connection.commandCharacteristic]);
 
+    // Request image list from device
+    const requestImageList = useCallback(async () => {
+        if (!connection.commandCharacteristic) return;
+
+        setIsLoadingImages(true);
+        setError(null);
+
+        try {
+            const command = JSON.stringify({ command: "list_images" });
+            const encoder = new TextEncoder();
+            await connection.commandCharacteristic.writeValue(encoder.encode(command));
+            console.log('Sent list_images command');
+        } catch (err) {
+            console.error('Error requesting image list:', err);
+            setError(`Failed to request image list: ${err}`);
+            setIsLoadingImages(false);
+        }
+    }, [connection.commandCharacteristic]);
+
+    // Request specific image from device
+    const requestImage = useCallback(async (filename: string) => {
+        if (!connection.commandCharacteristic || !filename) return;
+
+        setIsLoadingImage(true);
+        setCurrentImage(null);
+        setError(null);
+
+        try {
+            const command = JSON.stringify({ command: "get_image", filename });
+            const encoder = new TextEncoder();
+            await connection.commandCharacteristic.writeValue(encoder.encode(command));
+            console.log(`Sent get_image command for: ${filename}`);
+        } catch (err) {
+            console.error('Error requesting image:', err);
+            setError(`Failed to request image: ${err}`);
+            setIsLoadingImage(false);
+        }
+    }, [connection.commandCharacteristic]);
+
+    // Handle image selection change
+    const handleImageSelect = useCallback((event: React.ChangeEvent<HTMLSelectElement>) => {
+        const filename = event.target.value;
+        setSelectedImage(filename);
+        if (filename) {
+            requestImage(filename);
+        } else {
+            setCurrentImage(null);
+        }
+    }, [requestImage]);
+
     // Format uptime
     const formatUptime = (seconds: number): string => {
         const hours = Math.floor(seconds / 3600);
@@ -363,6 +458,15 @@ const BluetoothPage = (props: BluetoothProps) => {
                             >
                                 Ping
                             </button>
+                            <button
+                                type="button"
+                                className="btn btn-warning"
+                                onClick={requestImageList}
+                                disabled={isLoadingImages}
+                                style={{ marginLeft: '10px' }}
+                            >
+                                {isLoadingImages ? 'Loading...' : 'Get Images'}
+                            </button>
                         </div>
                     )}
                 </div>
@@ -371,6 +475,93 @@ const BluetoothPage = (props: BluetoothProps) => {
                 {error && (
                     <div className="alert alert-danger" style={{ marginTop: '20px' }}>
                         <strong>Error:</strong> {error}
+                    </div>
+                )}
+
+                {/* Image Selection and Display */}
+                {imageList.length > 0 && (
+                    <div className="image-section" style={{ marginTop: '20px' }}>
+                        <h2>Device Images</h2>
+                        <div style={{ marginBottom: '15px' }}>
+                            <label htmlFor="image-select" style={{ marginRight: '10px' }}>
+                                <strong>Select Image:</strong>
+                            </label>
+                            <select
+                                id="image-select"
+                                value={selectedImage}
+                                onChange={handleImageSelect}
+                                disabled={isLoadingImage}
+                                style={{
+                                    padding: '8px 12px',
+                                    borderRadius: '4px',
+                                    border: '1px solid #444',
+                                    minWidth: '300px',
+                                    backgroundColor: '#282c34',
+                                    color: '#ffffff'
+                                }}
+                            >
+                                <option value="">-- Select an image --</option>
+                                {imageList.map((img) => (
+                                    <option key={img} value={img}>
+                                        {img}
+                                    </option>
+                                ))}
+                            </select>
+                            <span style={{ marginLeft: '10px', color: '#666' }}>
+                                ({imageList.length} images available)
+                            </span>
+                        </div>
+
+                        {/* Loading indicator */}
+                        {isLoadingImage && imageProgress && (
+                            <div style={{ marginBottom: '15px' }}>
+                                <p>Loading image... ({imageProgress.current}/{imageProgress.total} chunks)</p>
+                                <div style={{
+                                    width: '100%',
+                                    height: '20px',
+                                    backgroundColor: '#e0e0e0',
+                                    borderRadius: '10px',
+                                    overflow: 'hidden'
+                                }}>
+                                    <div style={{
+                                        width: `${imageProgress.total > 0 ? (imageProgress.current / imageProgress.total) * 100 : 0}%`,
+                                        height: '100%',
+                                        backgroundColor: '#4CAF50',
+                                        transition: 'width 0.2s'
+                                    }} />
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Image display */}
+                        {currentImage && (
+                            <div style={{
+                                border: '1px solid #444',
+                                borderRadius: '8px',
+                                padding: '10px',
+                                backgroundColor: '#282c34'
+                            }}>
+                                <img
+                                    src={currentImage}
+                                    alt={selectedImage}
+                                    style={{
+                                        maxWidth: '100%',
+                                        maxHeight: '500px',
+                                        display: 'block',
+                                        margin: '0 auto',
+                                        borderRadius: '4px'
+                                    }}
+                                />
+                                <p style={{
+                                    textAlign: 'center',
+                                    marginTop: '10px',
+                                    color: '#e0e0e0',
+                                    fontSize: '14px'
+                                }}>
+                                    {selectedImage}
+                                </p>
+                            </div>
+                        )}
                     </div>
                 )}
 
