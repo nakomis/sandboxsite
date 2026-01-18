@@ -283,7 +283,7 @@ const FirmwareManager: React.FC<FirmwareManagerProps> = ({ ...pageProps }) => {
                                 </select>
                                 
                                 {selectedVersion && (
-                                    <div className="version-details">
+                                    <div className="version-details" style={{ marginTop: '20px' }}>
                                         {(() => {
                                             const version = manifest.versions.find(v => v.version === selectedVersion);
                                             return version ? (

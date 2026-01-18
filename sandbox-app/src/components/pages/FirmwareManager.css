@@ -166,7 +166,6 @@
     background-color: #3a4650;
     border-radius: 8px;
     padding: 20px;
-    border-left: 4px solid #546e7a;
 }
 
 .version-info h4 {
@@ -203,7 +202,6 @@
     background-color: #3a4650;
     border-radius: 8px;
     padding: 20px;
-    border-left: 4px solid #90caf9;
 }
 
 .update-status p {
@@ -354,7 +352,6 @@
     margin-top: 10px;
     padding: 10px;
     background: #1e3a5f;
-    border-left: 4px solid #90caf9;
     color: #90caf9;
     font-size: 14px;
     font-weight: 500;
