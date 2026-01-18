@@ -46,6 +46,22 @@ self.addEventListener('activate', (event) => {
 
 // Fetch event - serve cached content when offline
 self.addEventListener('fetch', (event) => {
+  const url = new URL(event.request.url);
+
+  // Network-first for S3/API requests (firmware manifests, etc.)
+  // These should always fetch fresh data
+  if (url.hostname.includes('amazonaws.com') ||
+      url.hostname.includes('s3.') ||
+      url.pathname.includes('manifest.json') ||
+      event.request.url.includes('firmware')) {
+    event.respondWith(
+      fetch(event.request)
+        .catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
+  // Cache-first for static assets only
   event.respondWith(
     caches.match(event.request)
       .then((response) => {
