@@ -81,6 +81,9 @@ const BluetoothPage = (props: BluetoothProps) => {
     const [imageChunks, setImageChunks] = useState<string[]>([]);
     const [imageProgress, setImageProgress] = useState<{ current: number; total: number } | null>(null);
 
+    // Photo capture state
+    const [isTakingPhoto, setIsTakingPhoto] = useState<boolean>(false);
+
     // Previously paired devices state
     const [pairedDevices, setPairedDevices] = useState<BluetoothDevice[]>([]);
     const [isReconnecting, setIsReconnecting] = useState<boolean>(false);
@@ -245,6 +248,16 @@ const BluetoothPage = (props: BluetoothProps) => {
                                 setError(responseJson.message);
                                 setIsLoadingImage(false);
                                 setIsLoadingImages(false);
+                                setIsTakingPhoto(false);
+                            }
+                            // Handle photo capture responses
+                            else if (responseJson.type === 'photo_started') {
+                                console.log('Photo capture started');
+                                setIsTakingPhoto(true);
+                            }
+                            else if (responseJson.type === 'photo_complete') {
+                                console.log('Photo capture complete');
+                                setIsTakingPhoto(false);
                             }
                         } catch {
                             // Not valid JSON - shouldn't happen
@@ -386,6 +399,13 @@ const BluetoothPage = (props: BluetoothProps) => {
                                 setError(responseJson.message);
                                 setIsLoadingImage(false);
                                 setIsLoadingImages(false);
+                                setIsTakingPhoto(false);
+                            } else if (responseJson.type === 'photo_started') {
+                                console.log('Photo capture started');
+                                setIsTakingPhoto(true);
+                            } else if (responseJson.type === 'photo_complete') {
+                                console.log('Photo capture complete');
+                                setIsTakingPhoto(false);
                             }
                         } catch {
                             console.error('Received non-JSON response:', responseText);
@@ -492,6 +512,25 @@ const BluetoothPage = (props: BluetoothProps) => {
             console.error('Error requesting image list:', err);
             setError(`Failed to request image list: ${err}`);
             setIsLoadingImages(false);
+        }
+    }, [connection.commandCharacteristic]);
+
+    // Take a photo on the device
+    const takePhoto = useCallback(async () => {
+        if (!connection.commandCharacteristic) return;
+
+        setIsTakingPhoto(true);
+        setError(null);
+
+        try {
+            const command = JSON.stringify({ command: "take_photo" });
+            const encoder = new TextEncoder();
+            await connection.commandCharacteristic.writeValue(encoder.encode(command));
+            console.log('Sent take_photo command');
+        } catch (err) {
+            console.error('Error taking photo:', err);
+            setError(`Failed to take photo: ${err}`);
+            setIsTakingPhoto(false);
         }
     }, [connection.commandCharacteristic]);
 
@@ -622,6 +661,15 @@ const BluetoothPage = (props: BluetoothProps) => {
                                 style={{ marginLeft: '10px' }}
                             >
                                 {isLoadingImages ? 'Loading...' : 'Get Images'}
+                            </button>
+                            <button
+                                type="button"
+                                className="btn btn-danger"
+                                onClick={takePhoto}
+                                disabled={isTakingPhoto}
+                                style={{ marginLeft: '10px' }}
+                            >
+                                {isTakingPhoto ? 'Capturing...' : 'Take Photo'}
                             </button>
                         </div>
                     )}
