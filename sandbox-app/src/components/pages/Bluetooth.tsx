@@ -80,6 +80,8 @@ const BluetoothPage = (props: BluetoothProps) => {
     const [currentImage, setCurrentImage] = useState<string | null>(null);
     const [imageChunks, setImageChunks] = useState<string[]>([]);
     const [imageProgress, setImageProgress] = useState<{ current: number; total: number } | null>(null);
+    const [imageListChunks, setImageListChunks] = useState<string[]>([]);
+    const [imageListProgress, setImageListProgress] = useState<{ current: number; total: number } | null>(null);
 
     // Photo capture state
     const [isTakingPhoto, setIsTakingPhoto] = useState<boolean>(false);
@@ -213,11 +215,26 @@ const BluetoothPage = (props: BluetoothProps) => {
                                 console.log('Ping response:', responseJson);
                                 setError(null);
                             }
-                            // Handle image list response
+                            // Handle image list response (legacy single message)
                             else if (responseJson.type === 'image_list') {
                                 console.log('Image list received:', responseJson.images);
                                 setImageList(responseJson.images || []);
                                 setIsLoadingImages(false);
+                            }
+                            // Handle chunked image list
+                            else if (responseJson.type === 'image_list_chunk') {
+                                setImageListChunks(prev => [...prev, responseJson.filename]);
+                                setImageListProgress({ current: responseJson.chunk + 1, total: responseJson.total });
+                            }
+                            // Handle image list complete
+                            else if (responseJson.type === 'image_list_complete') {
+                                console.log(`Image list complete: ${responseJson.count} images`);
+                                setImageListChunks(chunks => {
+                                    setImageList(chunks);
+                                    setIsLoadingImages(false);
+                                    setImageListProgress(null);
+                                    return [];
+                                });
                             }
                             // Handle image transfer start
                             else if (responseJson.type === 'image_start') {
@@ -381,6 +398,16 @@ const BluetoothPage = (props: BluetoothProps) => {
                             } else if (responseJson.type === 'image_list') {
                                 setImageList(responseJson.images || []);
                                 setIsLoadingImages(false);
+                            } else if (responseJson.type === 'image_list_chunk') {
+                                setImageListChunks(prev => [...prev, responseJson.filename]);
+                                setImageListProgress({ current: responseJson.chunk + 1, total: responseJson.total });
+                            } else if (responseJson.type === 'image_list_complete') {
+                                setImageListChunks(chunks => {
+                                    setImageList(chunks);
+                                    setIsLoadingImages(false);
+                                    setImageListProgress(null);
+                                    return [];
+                                });
                             } else if (responseJson.type === 'image_start') {
                                 setImageChunks([]);
                                 setImageProgress({ current: 0, total: 0 });
@@ -501,6 +528,8 @@ const BluetoothPage = (props: BluetoothProps) => {
         if (!connection.commandCharacteristic) return;
 
         setIsLoadingImages(true);
+        setImageListChunks([]);
+        setImageListProgress(null);
         setError(null);
 
         try {
