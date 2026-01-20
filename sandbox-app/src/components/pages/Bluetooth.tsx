@@ -5,7 +5,14 @@ import {
 } from "@aws-sdk/client-cognito-identity";
 import "./Bluetooth.css";
 import Page, { PageProps } from "./Page";
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
+import { LRUCache } from "typescript-lru-cache";
+
+// Cached image data with AI inference result
+interface ImageAndResult {
+    imageData: string;      // base64 data URL
+    metadata: string | null; // .txt file contents (AI inference JSON)
+}
 
 // BootBoots BLE Service UUIDs (lowercase as required by Web Bluetooth API)
 const BOOTBOOTS_SERVICE_UUID = "bb00b007-5af3-41c3-9689-2fc7175c1ba8";
@@ -78,10 +85,22 @@ const BluetoothPage = (props: BluetoothProps) => {
     const [isLoadingImages, setIsLoadingImages] = useState<boolean>(false);
     const [isLoadingImage, setIsLoadingImage] = useState<boolean>(false);
     const [currentImage, setCurrentImage] = useState<string | null>(null);
+    const [currentMetadata, setCurrentMetadata] = useState<string | null>(null);
     const [imageChunks, setImageChunks] = useState<string[]>([]);
     const [imageProgress, setImageProgress] = useState<{ current: number; total: number } | null>(null);
     const [imageListChunks, setImageListChunks] = useState<string[]>([]);
     const [imageListProgress, setImageListProgress] = useState<{ current: number; total: number } | null>(null);
+
+    // LRU Cache for images and metadata (persists across renders)
+    const imageCacheRef = useRef<LRUCache<string, ImageAndResult>>(
+        new LRUCache<string, ImageAndResult>({ maxSize: 20 })
+    );
+
+    // Pending metadata request (to pair with image once both are loaded)
+    const pendingImageDataRef = useRef<{ filename: string; imageData: string } | null>(null);
+
+    // Track filename from take_photo for auto-fetch
+    const pendingNewPhotoRef = useRef<string | null>(null);
 
     // Photo capture state
     const [isTakingPhoto, setIsTakingPhoto] = useState<boolean>(false);
@@ -233,6 +252,21 @@ const BluetoothPage = (props: BluetoothProps) => {
                                     setImageList(chunks);
                                     setIsLoadingImages(false);
                                     setImageListProgress(null);
+                                    // Check if we have a pending new photo to auto-select
+                                    const pendingFilename = pendingNewPhotoRef.current;
+                                    if (pendingFilename && chunks.includes(pendingFilename)) {
+                                        console.log(`Auto-selecting new photo: ${pendingFilename}`);
+                                        setSelectedImage(pendingFilename);
+                                        pendingNewPhotoRef.current = null;
+                                        // Request the new image
+                                        setIsLoadingImage(true);
+                                        setCurrentImage(null);
+                                        setCurrentMetadata(null);
+                                        const imageCommand = JSON.stringify({ command: "get_image", filename: pendingFilename });
+                                        const encoder = new TextEncoder();
+                                        commandChar.writeValue(encoder.encode(imageCommand));
+                                        console.log(`Sent get_image command for new photo: ${pendingFilename}`);
+                                    }
                                     return [];
                                 });
                             }
@@ -250,14 +284,40 @@ const BluetoothPage = (props: BluetoothProps) => {
                             // Handle image transfer complete
                             else if (responseJson.type === 'image_complete') {
                                 console.log(`Image transfer complete: ${responseJson.chunks} chunks`);
+                                const filename = responseJson.filename;
                                 // Reassemble image from base64 chunks
                                 setImageChunks(chunks => {
                                     const base64Data = chunks.join('');
-                                    setCurrentImage(`data:image/jpeg;base64,${base64Data}`);
-                                    setIsLoadingImage(false);
+                                    const imageDataUrl = `data:image/jpeg;base64,${base64Data}`;
+                                    setCurrentImage(imageDataUrl);
                                     setImageProgress(null);
+                                    // Store pending image data while we wait for metadata
+                                    pendingImageDataRef.current = { filename, imageData: imageDataUrl };
                                     return [];
                                 });
+                                // Request metadata for this image
+                                if (commandChar) {
+                                    const metaCommand = JSON.stringify({ command: "get_image_metadata", filename });
+                                    const encoder = new TextEncoder();
+                                    commandChar.writeValue(encoder.encode(metaCommand));
+                                    console.log(`Sent get_image_metadata command for: ${filename}`);
+                                }
+                            }
+                            // Handle metadata result
+                            else if (responseJson.type === 'metadata_result') {
+                                console.log(`Metadata result for: ${responseJson.filename}, found: ${responseJson.found}`);
+                                const metadata = responseJson.found ? responseJson.content : null;
+                                setCurrentMetadata(metadata);
+                                setIsLoadingImage(false);
+                                // Cache the image with its metadata
+                                if (pendingImageDataRef.current && pendingImageDataRef.current.filename === responseJson.filename) {
+                                    imageCacheRef.current.set(responseJson.filename, {
+                                        imageData: pendingImageDataRef.current.imageData,
+                                        metadata: metadata
+                                    });
+                                    console.log(`Cached image and metadata for: ${responseJson.filename}`);
+                                    pendingImageDataRef.current = null;
+                                }
                             }
                             // Handle error response
                             else if (responseJson.type === 'error') {
@@ -273,8 +333,20 @@ const BluetoothPage = (props: BluetoothProps) => {
                                 setIsTakingPhoto(true);
                             }
                             else if (responseJson.type === 'photo_complete') {
-                                console.log('Photo capture complete');
+                                console.log('Photo capture complete, new filename:', responseJson.filename);
                                 setIsTakingPhoto(false);
+                                // Store the new filename for auto-fetch after list refreshes
+                                if (responseJson.filename) {
+                                    pendingNewPhotoRef.current = responseJson.filename;
+                                    // Auto-refresh the image list
+                                    setIsLoadingImages(true);
+                                    setImageListChunks([]);
+                                    setImageListProgress(null);
+                                    const listCommand = JSON.stringify({ command: "list_images" });
+                                    const encoder = new TextEncoder();
+                                    commandChar.writeValue(encoder.encode(listCommand));
+                                    console.log('Auto-refreshing image list after photo capture');
+                                }
                             }
                         } catch {
                             // Not valid JSON - shouldn't happen
@@ -406,6 +478,20 @@ const BluetoothPage = (props: BluetoothProps) => {
                                     setImageList(chunks);
                                     setIsLoadingImages(false);
                                     setImageListProgress(null);
+                                    // Check if we have a pending new photo to auto-select
+                                    const pendingFilename = pendingNewPhotoRef.current;
+                                    if (pendingFilename && chunks.includes(pendingFilename)) {
+                                        console.log(`Auto-selecting new photo: ${pendingFilename}`);
+                                        setSelectedImage(pendingFilename);
+                                        pendingNewPhotoRef.current = null;
+                                        // Request the new image
+                                        setIsLoadingImage(true);
+                                        setCurrentImage(null);
+                                        setCurrentMetadata(null);
+                                        const imageCommand = JSON.stringify({ command: "get_image", filename: pendingFilename });
+                                        const encoder = new TextEncoder();
+                                        commandChar.writeValue(encoder.encode(imageCommand));
+                                    }
                                     return [];
                                 });
                             } else if (responseJson.type === 'image_start') {
@@ -415,13 +501,34 @@ const BluetoothPage = (props: BluetoothProps) => {
                                 setImageChunks(prev => [...prev, responseJson.data]);
                                 setImageProgress({ current: responseJson.chunk + 1, total: responseJson.total });
                             } else if (responseJson.type === 'image_complete') {
+                                const filename = responseJson.filename;
                                 setImageChunks(chunks => {
                                     const base64Data = chunks.join('');
-                                    setCurrentImage(`data:image/jpeg;base64,${base64Data}`);
-                                    setIsLoadingImage(false);
+                                    const imageDataUrl = `data:image/jpeg;base64,${base64Data}`;
+                                    setCurrentImage(imageDataUrl);
                                     setImageProgress(null);
+                                    // Store pending image data while we wait for metadata
+                                    pendingImageDataRef.current = { filename, imageData: imageDataUrl };
                                     return [];
                                 });
+                                // Request metadata for this image
+                                if (commandChar) {
+                                    const metaCommand = JSON.stringify({ command: "get_image_metadata", filename });
+                                    const encoder = new TextEncoder();
+                                    commandChar.writeValue(encoder.encode(metaCommand));
+                                }
+                            } else if (responseJson.type === 'metadata_result') {
+                                const metadata = responseJson.found ? responseJson.content : null;
+                                setCurrentMetadata(metadata);
+                                setIsLoadingImage(false);
+                                // Cache the image with its metadata
+                                if (pendingImageDataRef.current && pendingImageDataRef.current.filename === responseJson.filename) {
+                                    imageCacheRef.current.set(responseJson.filename, {
+                                        imageData: pendingImageDataRef.current.imageData,
+                                        metadata: metadata
+                                    });
+                                    pendingImageDataRef.current = null;
+                                }
                             } else if (responseJson.type === 'error') {
                                 setError(responseJson.message);
                                 setIsLoadingImage(false);
@@ -431,8 +538,19 @@ const BluetoothPage = (props: BluetoothProps) => {
                                 console.log('Photo capture started');
                                 setIsTakingPhoto(true);
                             } else if (responseJson.type === 'photo_complete') {
-                                console.log('Photo capture complete');
+                                console.log('Photo capture complete, new filename:', responseJson.filename);
                                 setIsTakingPhoto(false);
+                                // Store the new filename for auto-fetch after list refreshes
+                                if (responseJson.filename) {
+                                    pendingNewPhotoRef.current = responseJson.filename;
+                                    // Auto-refresh the image list
+                                    setIsLoadingImages(true);
+                                    setImageListChunks([]);
+                                    setImageListProgress(null);
+                                    const listCommand = JSON.stringify({ command: "list_images" });
+                                    const encoder = new TextEncoder();
+                                    commandChar.writeValue(encoder.encode(listCommand));
+                                }
                             }
                         } catch {
                             console.error('Received non-JSON response:', responseText);
@@ -588,9 +706,21 @@ const BluetoothPage = (props: BluetoothProps) => {
         const filename = event.target.value;
         setSelectedImage(filename);
         if (filename) {
-            requestImage(filename);
+            // Check cache first
+            const cached = imageCacheRef.current.get(filename);
+            if (cached) {
+                console.log(`Using cached image: ${filename}`);
+                setCurrentImage(cached.imageData);
+                setCurrentMetadata(cached.metadata);
+                setIsLoadingImage(false);
+            } else {
+                // Clear metadata when loading new image from device
+                setCurrentMetadata(null);
+                requestImage(filename);
+            }
         } else {
             setCurrentImage(null);
+            setCurrentMetadata(null);
         }
     }, [requestImage]);
 
@@ -734,7 +864,7 @@ const BluetoothPage = (props: BluetoothProps) => {
                                 }}
                             >
                                 <option value="">-- Select an image --</option>
-                                {imageList.map((img) => (
+                                {[...imageList].reverse().map((img) => (
                                     <option key={img} value={img}>
                                         {img}
                                     </option>
@@ -766,33 +896,121 @@ const BluetoothPage = (props: BluetoothProps) => {
                             </div>
                         )}
 
-                        {/* Image display */}
+                        {/* Image and metadata display */}
                         {currentImage && (
                             <div style={{
-                                border: '1px solid #444',
-                                borderRadius: '8px',
-                                padding: '10px',
-                                backgroundColor: '#282c34'
+                                display: 'flex',
+                                gap: '20px',
+                                alignItems: 'flex-start'
                             }}>
-                                <img
-                                    src={currentImage}
-                                    alt={selectedImage}
-                                    style={{
-                                        maxWidth: '100%',
-                                        maxHeight: '500px',
-                                        display: 'block',
-                                        margin: '0 auto',
-                                        borderRadius: '4px'
-                                    }}
-                                />
-                                <p style={{
-                                    textAlign: 'center',
-                                    marginTop: '10px',
-                                    color: '#e0e0e0',
-                                    fontSize: '14px'
+                                {/* Image panel */}
+                                <div style={{
+                                    flex: '1',
+                                    border: '1px solid #444',
+                                    borderRadius: '8px',
+                                    padding: '10px',
+                                    backgroundColor: '#282c34'
                                 }}>
-                                    {selectedImage}
-                                </p>
+                                    <img
+                                        src={currentImage}
+                                        alt={selectedImage}
+                                        style={{
+                                            maxWidth: '100%',
+                                            maxHeight: '500px',
+                                            display: 'block',
+                                            margin: '0 auto',
+                                            borderRadius: '4px'
+                                        }}
+                                    />
+                                    <p style={{
+                                        textAlign: 'center',
+                                        marginTop: '10px',
+                                        color: '#e0e0e0',
+                                        fontSize: '14px'
+                                    }}>
+                                        {selectedImage}
+                                    </p>
+                                </div>
+
+                                {/* Metadata panel */}
+                                <div style={{
+                                    flex: '0 0 300px',
+                                    border: '1px solid #444',
+                                    borderRadius: '8px',
+                                    padding: '15px',
+                                    backgroundColor: '#282c34'
+                                }}>
+                                    <h4 style={{ marginTop: 0, marginBottom: '15px', color: '#e0e0e0' }}>
+                                        AI Inference Result
+                                    </h4>
+                                    {currentMetadata ? (
+                                        (() => {
+                                            try {
+                                                const data = JSON.parse(currentMetadata);
+                                                const catNames = ['Boots', 'Chi', 'Kappa', 'Mu', 'Tau', 'NoCat'];
+                                                return (
+                                                    <div>
+                                                        {data.mostLikelyCat && (
+                                                            <div style={{
+                                                                marginBottom: '15px',
+                                                                padding: '10px',
+                                                                backgroundColor: '#1a1a2e',
+                                                                borderRadius: '6px'
+                                                            }}>
+                                                                <p style={{ margin: '0 0 5px 0', color: '#4CAF50', fontWeight: 'bold', fontSize: '18px' }}>
+                                                                    {data.mostLikelyCat.name}
+                                                                </p>
+                                                                <p style={{ margin: 0, color: '#aaa', fontSize: '14px' }}>
+                                                                    Confidence: {(data.mostLikelyCat.confidence * 100).toFixed(1)}%
+                                                                </p>
+                                                            </div>
+                                                        )}
+                                                        {data.data?.probabilities && (
+                                                            <div>
+                                                                <p style={{ color: '#888', fontSize: '12px', marginBottom: '8px' }}>
+                                                                    All Probabilities:
+                                                                </p>
+                                                                {data.data.probabilities.map((prob: number, i: number) => (
+                                                                    <div key={catNames[i]} style={{
+                                                                        display: 'flex',
+                                                                        justifyContent: 'space-between',
+                                                                        marginBottom: '4px',
+                                                                        padding: '4px 8px',
+                                                                        backgroundColor: i === data.mostLikelyCat?.index ? '#2d3748' : 'transparent',
+                                                                        borderRadius: '4px'
+                                                                    }}>
+                                                                        <span style={{ color: '#e0e0e0', fontSize: '13px' }}>
+                                                                            {catNames[i]}
+                                                                        </span>
+                                                                        <span style={{ color: '#aaa', fontSize: '13px' }}>
+                                                                            {(prob * 100).toFixed(1)}%
+                                                                        </span>
+                                                                    </div>
+                                                                ))}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            } catch {
+                                                return (
+                                                    <pre style={{
+                                                        color: '#e0e0e0',
+                                                        fontSize: '12px',
+                                                        whiteSpace: 'pre-wrap',
+                                                        wordBreak: 'break-word',
+                                                        margin: 0
+                                                    }}>
+                                                        {currentMetadata}
+                                                    </pre>
+                                                );
+                                            }
+                                        })()
+                                    ) : (
+                                        <p style={{ color: '#666', fontStyle: 'italic', margin: 0 }}>
+                                            {isLoadingImage ? 'Loading...' : 'No metadata available'}
+                                        </p>
+                                    )}
+                                </div>
                             </div>
                         )}
                     </div>
