@@ -35,6 +35,7 @@ interface BootBootsSystemStatus {
         sd_card_ready: boolean;
         i2c_ready: boolean;
         atomizer_enabled: boolean;
+        training_mode: boolean;
     };
     statistics: {
         total_detections: number;
@@ -104,6 +105,11 @@ const BluetoothPage = (props: BluetoothProps) => {
 
     // Photo capture state
     const [isTakingPhoto, setIsTakingPhoto] = useState<boolean>(false);
+
+    // Training mode settings state
+    const [trainingMode, setTrainingMode] = useState<boolean>(false);
+    const [isUpdatingSetting, setIsUpdatingSetting] = useState<boolean>(false);
+    const [settingsExpanded, setSettingsExpanded] = useState<boolean>(false);
 
     // Previously paired devices state
     const [pairedDevices, setPairedDevices] = useState<BluetoothDevice[]>([]);
@@ -348,6 +354,19 @@ const BluetoothPage = (props: BluetoothProps) => {
                                     console.log('Auto-refreshing image list after photo capture');
                                 }
                             }
+                            // Handle settings response
+                            else if (responseJson.type === 'settings') {
+                                console.log('Settings received:', responseJson);
+                                setTrainingMode(responseJson.training_mode || false);
+                            }
+                            // Handle setting updated confirmation
+                            else if (responseJson.type === 'setting_updated') {
+                                console.log('Setting updated:', responseJson);
+                                if (responseJson.setting === 'training_mode') {
+                                    setTrainingMode(responseJson.value);
+                                }
+                                setIsUpdatingSetting(false);
+                            }
                         } catch {
                             // Not valid JSON - shouldn't happen
                             console.error('Received non-JSON response:', responseText);
@@ -552,6 +571,19 @@ const BluetoothPage = (props: BluetoothProps) => {
                                     commandChar.writeValue(encoder.encode(listCommand));
                                 }
                             }
+                            // Handle settings response
+                            else if (responseJson.type === 'settings') {
+                                console.log('Settings received:', responseJson);
+                                setTrainingMode(responseJson.training_mode || false);
+                            }
+                            // Handle setting updated confirmation
+                            else if (responseJson.type === 'setting_updated') {
+                                console.log('Setting updated:', responseJson);
+                                if (responseJson.setting === 'training_mode') {
+                                    setTrainingMode(responseJson.value);
+                                }
+                                setIsUpdatingSetting(false);
+                            }
                         } catch {
                             console.error('Received non-JSON response:', responseText);
                         }
@@ -681,6 +713,44 @@ const BluetoothPage = (props: BluetoothProps) => {
         }
     }, [connection.commandCharacteristic]);
 
+    // Request settings from device
+    const requestSettings = useCallback(async () => {
+        if (!connection.commandCharacteristic) return;
+
+        try {
+            const command = JSON.stringify({ command: "get_settings" });
+            const encoder = new TextEncoder();
+            await connection.commandCharacteristic.writeValue(encoder.encode(command));
+            console.log('Sent get_settings command');
+        } catch (err) {
+            console.error('Error requesting settings:', err);
+            setError(`Failed to request settings: ${err}`);
+        }
+    }, [connection.commandCharacteristic]);
+
+    // Toggle training mode
+    const toggleTrainingMode = useCallback(async () => {
+        if (!connection.commandCharacteristic) return;
+
+        setIsUpdatingSetting(true);
+        const newValue = !trainingMode;
+
+        try {
+            const command = JSON.stringify({
+                command: "set_setting",
+                setting: "training_mode",
+                value: newValue
+            });
+            const encoder = new TextEncoder();
+            await connection.commandCharacteristic.writeValue(encoder.encode(command));
+            console.log(`Sent set_setting command: training_mode=${newValue}`);
+        } catch (err) {
+            console.error('Error toggling training mode:', err);
+            setError(`Failed to toggle training mode: ${err}`);
+            setIsUpdatingSetting(false);
+        }
+    }, [connection.commandCharacteristic, trainingMode]);
+
     // Request specific image from device
     const requestImage = useCallback(async (filename: string) => {
         if (!connection.commandCharacteristic || !filename) return;
@@ -700,6 +770,17 @@ const BluetoothPage = (props: BluetoothProps) => {
             setIsLoadingImage(false);
         }
     }, [connection.commandCharacteristic]);
+
+    // Auto-fetch settings when connected
+    useEffect(() => {
+        if (connectionStatus === "Connected" && connection.commandCharacteristic) {
+            // Small delay to ensure connection is stable
+            const timer = setTimeout(() => {
+                requestSettings();
+            }, 500);
+            return () => clearTimeout(timer);
+        }
+    }, [connectionStatus, connection.commandCharacteristic, requestSettings]);
 
     // Handle image selection change
     const handleImageSelect = useCallback((event: React.ChangeEvent<HTMLSelectElement>) => {
@@ -833,6 +914,108 @@ const BluetoothPage = (props: BluetoothProps) => {
                         </div>
                     )}
                 </div>
+
+                {/* Device Settings */}
+                {connection.device && (
+                    <div className="device-settings" style={{ marginTop: '20px' }}>
+                        <div
+                            onClick={() => setSettingsExpanded(!settingsExpanded)}
+                            style={{
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                marginBottom: '10px'
+                            }}
+                        >
+                            <span style={{
+                                transform: settingsExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
+                                transition: 'transform 0.2s',
+                                marginRight: '8px',
+                                fontSize: '14px'
+                            }}>▶</span>
+                            <h3 style={{ margin: 0 }}>Device Settings</h3>
+                        </div>
+
+                        {settingsExpanded && (
+                            <div style={{
+                                border: '1px solid #444',
+                                borderRadius: '8px',
+                                padding: '15px',
+                                backgroundColor: '#282c34'
+                            }}>
+                                <div style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    marginBottom: '10px'
+                                }}>
+                                    <div>
+                                        <strong>Training Mode</strong>
+                                        <p style={{ margin: '5px 0 0 0', fontSize: '12px', color: '#888' }}>
+                                            Captures photos without AI inference or deterrent activation.
+                                            Photos are uploaded to S3 training/ prefix for model training.
+                                        </p>
+                                    </div>
+                                    <label className="switch" style={{
+                                        position: 'relative',
+                                        display: 'inline-block',
+                                        width: '60px',
+                                        height: '34px',
+                                        flexShrink: 0,
+                                        marginLeft: '20px'
+                                    }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={trainingMode}
+                                            onChange={toggleTrainingMode}
+                                            disabled={isUpdatingSetting}
+                                            style={{
+                                                opacity: 0,
+                                                width: 0,
+                                                height: 0
+                                            }}
+                                        />
+                                        <span style={{
+                                            position: 'absolute',
+                                            cursor: isUpdatingSetting ? 'wait' : 'pointer',
+                                            top: 0,
+                                            left: 0,
+                                            right: 0,
+                                            bottom: 0,
+                                            backgroundColor: trainingMode ? '#4CAF50' : '#ccc',
+                                            transition: '0.4s',
+                                            borderRadius: '34px',
+                                            opacity: isUpdatingSetting ? 0.6 : 1
+                                        }}>
+                                            <span style={{
+                                                position: 'absolute',
+                                                content: '',
+                                                height: '26px',
+                                                width: '26px',
+                                                left: trainingMode ? '30px' : '4px',
+                                                bottom: '4px',
+                                                backgroundColor: 'white',
+                                                transition: '0.4s',
+                                                borderRadius: '50%'
+                                            }}></span>
+                                        </span>
+                                    </label>
+                                </div>
+                                {trainingMode && (
+                                    <div style={{
+                                        backgroundColor: '#3d4450',
+                                        padding: '8px 12px',
+                                        borderRadius: '4px',
+                                        fontSize: '13px',
+                                        color: '#ffc107'
+                                    }}>
+                                        Training mode is active. Motion-triggered photos will be captured without inference.
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                )}
 
                 {/* Error Display */}
                 {error && (
@@ -1062,6 +1245,7 @@ const BluetoothPage = (props: BluetoothProps) => {
                                 <p><strong>SD Card Ready:</strong> {systemStatus.system.sd_card_ready ? '✅' : '❌'}</p>
                                 <p><strong>I2C Ready:</strong> {systemStatus.system.i2c_ready ? '✅' : '❌'}</p>
                                 <p><strong>Atomizer Enabled:</strong> {systemStatus.system.atomizer_enabled ? '✅' : '❌'}</p>
+                                <p><strong>Training Mode:</strong> {systemStatus.system.training_mode ? '🎯 ON' : '❌ OFF'}</p>
                             </div>
 
                             <div className="statistics">
