@@ -3,6 +3,8 @@ import * as cm from 'aws-cdk-lib/aws-certificatemanager';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
 import * as route53 from 'aws-cdk-lib/aws-route53';
 import * as targets from 'aws-cdk-lib/aws-route53-targets';
+import { ITable, Table } from 'aws-cdk-lib/aws-dynamodb';
+import { Bucket } from 'aws-cdk-lib/aws-s3';
 import { Construct } from 'constructs';
 
 export interface CognitoStackProps extends cdk.StackProps {
@@ -85,6 +87,13 @@ export class CognitoStack extends cdk.Stack {
                 'sts:AssumeRoleWithWebIdentity'
             ),
         });
+
+        // Grant access to catadata table and bucket for cat labeling page
+        const catadataTable: ITable = Table.fromTableName(this, 'CatadataTable', 'catadata');
+        const catBucket = Bucket.fromBucketName(this, 'CatadataBucket', `bootboots-images-${this.account}-${this.region}`);
+
+        catadataTable.grantReadWriteData(this.userRole);
+        catBucket.grantRead(this.userRole);
 
         new cognito.CfnIdentityPoolRoleAttachment(this, 'SandboxIdentityPoolRoleAttachment', {
             identityPoolId: identityPool.ref,

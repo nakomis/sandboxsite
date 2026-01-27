@@ -61,4 +61,9 @@ IDENTITY_POOL_ID=$(aws cognito-identity list-identity-pools --max-results 60 | j
 
 setValue identityPoolId $IDENTITY_POOL_ID
 
+# BootBoots images bucket (training images)
+AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+AWS_REGION=$(aws configure get region)
+setValue imagesBucket "bootboots-images-${AWS_ACCOUNT_ID}-${AWS_REGION}"
+
 rm -f $SCRIPT_DIR/../src/config/config.json.bk

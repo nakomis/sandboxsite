@@ -12,6 +12,9 @@ export interface SandboxConfig {
         logoutUri: string;
         identityPoolId: string;
     };
+    bootboots: {
+        imagesBucket: string;
+    };
 }
 
 let Config: SandboxConfig = require('./config.json');

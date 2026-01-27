@@ -11,5 +11,8 @@
         "redirectUri": "<REDIRECT_URI>",
         "logoutUri": "<LOGOUT_URI>",
         "identityPoolId": "<IDENTITY_POOL_ID>"
+    },
+    "bootboots": {
+        "imagesBucket": "<IMAGES_BUCKET>"
     }
 }
