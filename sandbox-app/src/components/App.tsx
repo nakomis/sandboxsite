@@ -18,7 +18,6 @@ import {
 import Config from '../config/config';
 import HomePage from './pages/HomePage';
 import BluetoothPage from './pages/Bluetooth';
-import OTAUpdatePage from './pages/OTAUpdate';
 import FirmwareManagerPage from './pages/FirmwareManager';
 import BootBootsPage from './pages/BootBootsPage';
 
@@ -155,7 +154,6 @@ const App: React.FC = () => {
                                         }}>
                                             <Tab label="Home" />
                                             <Tab label="Bluetooth" />
-                                            <Tab label="OTA Updates" />
                                             <Tab label="Firmware Manager" />
                                             <Tab label="Cat Labeling" />
                                         </Tabs>
@@ -171,9 +169,8 @@ const App: React.FC = () => {
                             <Box sx={{ width: '100%' }}>
                                 <HomePage tabId={tabId} index={0} creds={creds}></HomePage>
                                 <BluetoothPage tabId={tabId} index={1} creds={creds}></BluetoothPage>
-                                <OTAUpdatePage tabId={tabId} index={2} creds={creds}></OTAUpdatePage>
-                                <FirmwareManagerPage tabId={tabId} index={3} creds={creds}></FirmwareManagerPage>
-                                <BootBootsPage tabId={tabId} index={4} creds={creds} username={auth.user?.profile?.preferred_username || null}></BootBootsPage>
+                                <FirmwareManagerPage tabId={tabId} index={2} creds={creds}></FirmwareManagerPage>
+                                <BootBootsPage tabId={tabId} index={3} creds={creds} username={auth.user?.profile?.preferred_username || null}></BootBootsPage>
                             </Box>
                         </ThemeProvider>
                         {
