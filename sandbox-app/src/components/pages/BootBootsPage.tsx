@@ -90,6 +90,7 @@ const BootBootsPage = (props: BootBootProps) => {
                     {imgdiv}
                     <button
                         className="btn btn-primary"
+                        title="Mu (M)"
                         onClick={() => {
                             clickCat("Mu")
                         }}
@@ -99,6 +100,7 @@ const BootBootsPage = (props: BootBootProps) => {
                     </button>
                     <button
                         className="btn btn-primary"
+                        title="Tau (T)"
                         onClick={() => {
                             clickCat("Tau");
                         }}
@@ -108,6 +110,7 @@ const BootBootsPage = (props: BootBootProps) => {
                     </button>
                     <button
                         className="btn btn-primary"
+                        title="Chi (C)"
                         onClick={() => {
                             clickCat("Chi");
                         }}
@@ -117,6 +120,7 @@ const BootBootsPage = (props: BootBootProps) => {
                     </button>
                     <button
                         className="btn btn-primary"
+                        title="Kappa (K)"
                         onClick={() => {
                             clickCat("Kappa");
                         }}
@@ -127,6 +131,7 @@ const BootBootsPage = (props: BootBootProps) => {
                     <br></br>
                     <button
                         className="btn btn-primary"
+                        title="Boots (B)"
                         onClick={() => {
                             clickCat("Boots");
                         }}
@@ -136,6 +141,7 @@ const BootBootsPage = (props: BootBootProps) => {
                     </button>
                     <button
                         className="btn btn-primary"
+                        title="Wolf (W)"
                         onClick={() => {
                             clickCat("Wolf");
                         }}
@@ -145,6 +151,7 @@ const BootBootsPage = (props: BootBootProps) => {
                     </button>
                     <button
                         className="btn btn-primary"
+                        title="No Cat (N)"
                         onClick={() => {
                             clickCat("NoCat");
                         }}
