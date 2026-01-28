@@ -19,7 +19,6 @@ class KeyPressComponent extends React.Component {
         if (this.onKeyUp) {
             this.onKeyUp.call(window, event);
         }
-        console.log("Key released:", event.key);
     };
 
     componentDidMount() {
