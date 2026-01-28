@@ -14,6 +14,58 @@ interface ImageAndResult {
     metadata: string | null; // .txt file contents (AI inference JSON)
 }
 
+// Camera sensor settings synced with device
+interface CameraSettings {
+    frame_size: number;       // framesize_t enum value
+    jpeg_quality: number;     // 0-63 (lower = better)
+    fb_count: number;         // 1-3
+    brightness: number;       // -2 to 2
+    contrast: number;         // -2 to 2
+    saturation: number;       // -2 to 2
+    special_effect: number;   // 0-6
+    white_balance: boolean;
+    awb_gain: boolean;
+    wb_mode: number;          // 0-4
+    exposure_ctrl: boolean;
+    aec2: boolean;
+    ae_level: number;         // -2 to 2
+    aec_value: number;        // 0 to 1200
+    gain_ctrl: boolean;
+    agc_gain: number;         // 0 to 30
+    gain_ceiling: number;     // 0 to 6
+    bpc: boolean;
+    wpc: boolean;
+    raw_gma: boolean;
+    lenc: boolean;
+    hmirror: boolean;
+    vflip: boolean;
+    dcw: boolean;
+    colorbar: boolean;
+}
+
+const DEFAULT_CAMERA_SETTINGS: CameraSettings = {
+    frame_size: 13, jpeg_quality: 10, fb_count: 2,
+    brightness: 0, contrast: 0, saturation: 0, special_effect: 0,
+    white_balance: true, awb_gain: true, wb_mode: 0,
+    exposure_ctrl: true, aec2: false, ae_level: -2, aec_value: 300,
+    gain_ctrl: true, agc_gain: 15, gain_ceiling: 0,
+    bpc: false, wpc: true, raw_gma: true, lenc: true,
+    hmirror: false, vflip: false, dcw: true, colorbar: false
+};
+
+const SPECIAL_EFFECT_NAMES = ['None', 'Negative', 'Grayscale', 'Red Tint', 'Green Tint', 'Blue Tint', 'Sepia'];
+const WB_MODE_NAMES = ['Auto', 'Sunny', 'Cloudy', 'Office', 'Home'];
+const FRAME_SIZE_OPTIONS: { value: number; label: string }[] = [
+    { value: 5, label: 'QVGA (320x240)' },
+    { value: 6, label: 'CIF (400x296)' },
+    { value: 8, label: 'VGA (640x480)' },
+    { value: 9, label: 'SVGA (800x600)' },
+    { value: 10, label: 'XGA (1024x768)' },
+    { value: 11, label: 'HD (1280x720)' },
+    { value: 12, label: 'SXGA (1280x1024)' },
+    { value: 13, label: 'UXGA (1600x1200)' },
+];
+
 // BootBoots BLE Service UUIDs (lowercase as required by Web Bluetooth API)
 const BOOTBOOTS_SERVICE_UUID = "bb00b007-5af3-41c3-9689-2fc7175c1ba8";
 const STATUS_CHARACTERISTIC_UUID = "bb00b007-e90f-49fa-89c5-31e705b74d85";
@@ -57,6 +109,84 @@ interface BluetoothConnection {
     logsCharacteristic: BluetoothRemoteGATTCharacteristic | null;
     commandCharacteristic: BluetoothRemoteGATTCharacteristic | null;
 }
+
+// Reusable camera setting components
+const CameraSlider = ({ label, value, min, max, setting, onChange, disabled }: {
+    label: string; value: number; min: number; max: number; setting: string;
+    onChange: (setting: string, value: number) => void; disabled: boolean;
+}) => (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+        <label style={{ fontSize: '13px', color: '#e0e0e0', minWidth: '120px' }}>{label}</label>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span style={{ fontSize: '11px', color: '#888', minWidth: '20px', textAlign: 'right' }}>{min}</span>
+            <input
+                type="range"
+                min={min}
+                max={max}
+                value={value}
+                onChange={(e) => onChange(setting, parseInt(e.target.value))}
+                disabled={disabled}
+                style={{ width: '120px', cursor: disabled ? 'wait' : 'pointer' }}
+            />
+            <span style={{ fontSize: '11px', color: '#888', minWidth: '20px' }}>{max}</span>
+            <span style={{ fontSize: '13px', color: '#4CAF50', minWidth: '35px', textAlign: 'right', fontWeight: 'bold' }}>{value}</span>
+        </div>
+    </div>
+);
+
+const CameraToggle = ({ label, value, setting, onChange, disabled }: {
+    label: string; value: boolean; setting: string;
+    onChange: (setting: string, value: boolean) => void; disabled: boolean;
+}) => (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+        <label style={{ fontSize: '13px', color: '#e0e0e0' }}>{label}</label>
+        <label style={{ position: 'relative', display: 'inline-block', width: '44px', height: '24px', flexShrink: 0 }}>
+            <input
+                type="checkbox"
+                checked={value}
+                onChange={() => onChange(setting, !value)}
+                disabled={disabled}
+                style={{ opacity: 0, width: 0, height: 0 }}
+            />
+            <span style={{
+                position: 'absolute', cursor: disabled ? 'wait' : 'pointer',
+                top: 0, left: 0, right: 0, bottom: 0,
+                backgroundColor: value ? '#4CAF50' : '#555',
+                transition: '0.3s', borderRadius: '24px',
+                opacity: disabled ? 0.6 : 1
+            }}>
+                <span style={{
+                    position: 'absolute', height: '18px', width: '18px',
+                    left: value ? '23px' : '3px', bottom: '3px',
+                    backgroundColor: 'white', transition: '0.3s', borderRadius: '50%'
+                }}></span>
+            </span>
+        </label>
+    </div>
+);
+
+const CameraSelect = ({ label, value, options, setting, onChange, disabled }: {
+    label: string; value: number; options: string[]; setting: string;
+    onChange: (setting: string, value: number) => void; disabled: boolean;
+}) => (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+        <label style={{ fontSize: '13px', color: '#e0e0e0' }}>{label}</label>
+        <select
+            value={value}
+            onChange={(e) => onChange(setting, parseInt(e.target.value))}
+            disabled={disabled}
+            style={{
+                padding: '4px 8px', borderRadius: '4px', border: '1px solid #444',
+                backgroundColor: '#1a1a2e', color: '#e0e0e0', fontSize: '13px',
+                cursor: disabled ? 'wait' : 'pointer'
+            }}
+        >
+            {options.map((name, i) => (
+                <option key={i} value={i}>{name}</option>
+            ))}
+        </select>
+    </div>
+);
 
 const BluetoothPage = (props: BluetoothProps) => {
     const { children, tabId, index } = props;
@@ -110,6 +240,10 @@ const BluetoothPage = (props: BluetoothProps) => {
     const [trainingMode, setTrainingMode] = useState<boolean>(false);
     const [isUpdatingSetting, setIsUpdatingSetting] = useState<boolean>(false);
     const [settingsExpanded, setSettingsExpanded] = useState<boolean>(false);
+
+    // Camera settings state
+    const [cameraSettings, setCameraSettings] = useState<CameraSettings>(DEFAULT_CAMERA_SETTINGS);
+    const [cameraSettingsExpanded, setCameraSettingsExpanded] = useState<boolean>(false);
 
     // Previously paired devices state
     const [pairedDevices, setPairedDevices] = useState<BluetoothDevice[]>([]);
@@ -199,7 +333,6 @@ const BluetoothPage = (props: BluetoothProps) => {
                     const value = characteristic.value;
                     if (value) {
                         const responseText = new TextDecoder().decode(value);
-                        console.log('Command response received:', responseText);
 
                         // Try to parse as JSON
                         try {
@@ -358,12 +491,18 @@ const BluetoothPage = (props: BluetoothProps) => {
                             else if (responseJson.type === 'settings') {
                                 console.log('Settings received:', responseJson);
                                 setTrainingMode(responseJson.training_mode || false);
+                                if (responseJson.camera) {
+                                    setCameraSettings(prev => ({ ...prev, ...responseJson.camera }));
+                                }
                             }
                             // Handle setting updated confirmation
                             else if (responseJson.type === 'setting_updated') {
                                 console.log('Setting updated:', responseJson);
                                 if (responseJson.setting === 'training_mode') {
                                     setTrainingMode(responseJson.value);
+                                } else if (typeof responseJson.setting === 'string' && responseJson.setting.startsWith('camera_')) {
+                                    const camKey = responseJson.setting.substring(7);
+                                    setCameraSettings(prev => ({ ...prev, [camKey]: responseJson.value }));
                                 }
                                 setIsUpdatingSetting(false);
                             }
@@ -463,7 +602,6 @@ const BluetoothPage = (props: BluetoothProps) => {
                     const value = characteristic.value;
                     if (value) {
                         const responseText = new TextDecoder().decode(value);
-                        console.log('Command response received:', responseText);
 
                         try {
                             const responseJson = JSON.parse(responseText);
@@ -575,12 +713,18 @@ const BluetoothPage = (props: BluetoothProps) => {
                             else if (responseJson.type === 'settings') {
                                 console.log('Settings received:', responseJson);
                                 setTrainingMode(responseJson.training_mode || false);
+                                if (responseJson.camera) {
+                                    setCameraSettings(prev => ({ ...prev, ...responseJson.camera }));
+                                }
                             }
                             // Handle setting updated confirmation
                             else if (responseJson.type === 'setting_updated') {
                                 console.log('Setting updated:', responseJson);
                                 if (responseJson.setting === 'training_mode') {
                                     setTrainingMode(responseJson.value);
+                                } else if (typeof responseJson.setting === 'string' && responseJson.setting.startsWith('camera_')) {
+                                    const camKey = responseJson.setting.substring(7);
+                                    setCameraSettings(prev => ({ ...prev, [camKey]: responseJson.value }));
                                 }
                                 setIsUpdatingSetting(false);
                             }
@@ -639,12 +783,13 @@ const BluetoothPage = (props: BluetoothProps) => {
 
         setIsLoadingLogs(true);
         setError(null);
+        setLogChunks([]);
 
         try {
             console.log('Sending request_logs command...');
-            const command = JSON.stringify({ command: "request_logs" });
+            const command = JSON.stringify({ command: "request_logs", entries: 150 });
             const encoder = new TextEncoder();
-            connection.commandCharacteristic.writeValue(encoder.encode(command));
+            await connection.commandCharacteristic.writeValue(encoder.encode(command));
             console.log(`Command sent: ${command}, waiting for notification response...`);
 
             // // Set a timeout to reset loading state if no response comes
@@ -750,6 +895,28 @@ const BluetoothPage = (props: BluetoothProps) => {
             setIsUpdatingSetting(false);
         }
     }, [connection.commandCharacteristic, trainingMode]);
+
+    // Update a camera setting on the device
+    const updateCameraSetting = useCallback(async (settingName: string, value: number | boolean) => {
+        if (!connection.commandCharacteristic) return;
+
+        setIsUpdatingSetting(true);
+
+        try {
+            const command = JSON.stringify({
+                command: "set_setting",
+                setting: `camera_${settingName}`,
+                value: value
+            });
+            const encoder = new TextEncoder();
+            await connection.commandCharacteristic.writeValue(encoder.encode(command));
+            console.log(`Sent set_setting command: camera_${settingName}=${value}`);
+        } catch (err) {
+            console.error('Error updating camera setting:', err);
+            setError(`Failed to update camera setting: ${err}`);
+            setIsUpdatingSetting(false);
+        }
+    }, [connection.commandCharacteristic]);
 
     // Request specific image from device
     const requestImage = useCallback(async (filename: string) => {
@@ -1012,6 +1179,115 @@ const BluetoothPage = (props: BluetoothProps) => {
                                         Training mode is active. Motion-triggered photos will be captured without inference.
                                     </div>
                                 )}
+
+                                {/* Camera Settings */}
+                                <div style={{ marginTop: '20px' }}>
+                                    <div
+                                        onClick={() => setCameraSettingsExpanded(!cameraSettingsExpanded)}
+                                        style={{
+                                            cursor: 'pointer',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            marginBottom: '10px'
+                                        }}
+                                    >
+                                        <span style={{
+                                            transform: cameraSettingsExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
+                                            transition: 'transform 0.2s',
+                                            marginRight: '8px',
+                                            fontSize: '14px'
+                                        }}>▶</span>
+                                        <strong>Camera Settings</strong>
+                                    </div>
+
+                                    {cameraSettingsExpanded && (
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', maxWidth: '500px' }}>
+                                            {/* Resolution & Quality */}
+                                            <div style={{ borderBottom: '1px solid #444', paddingBottom: '12px' }}>
+                                                <h4 style={{ margin: '0 0 10px 0', color: '#aaa', fontSize: '13px', textTransform: 'uppercase' }}>Resolution & Quality</h4>
+                                                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+                                                    <label style={{ fontSize: '13px', color: '#e0e0e0' }}>Frame Size</label>
+                                                    <select
+                                                        value={cameraSettings.frame_size}
+                                                        onChange={(e) => updateCameraSetting('frame_size', parseInt(e.target.value))}
+                                                        disabled={isUpdatingSetting}
+                                                        style={{
+                                                            padding: '4px 8px', borderRadius: '4px', border: '1px solid #444',
+                                                            backgroundColor: '#1a1a2e', color: '#e0e0e0', fontSize: '13px',
+                                                            cursor: isUpdatingSetting ? 'wait' : 'pointer'
+                                                        }}
+                                                    >
+                                                        {FRAME_SIZE_OPTIONS.map((opt) => (
+                                                            <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                                <CameraSlider label="JPEG Quality" value={cameraSettings.jpeg_quality} min={0} max={63} setting="jpeg_quality" onChange={updateCameraSetting} disabled={isUpdatingSetting} />
+                                                <CameraSlider label="Frame Buffers" value={cameraSettings.fb_count} min={1} max={3} setting="fb_count" onChange={updateCameraSetting} disabled={isUpdatingSetting} />
+                                                <p style={{ margin: '4px 0 0 0', fontSize: '11px', color: '#666' }}>
+                                                    JPEG Quality: lower = better quality. Frame Buffers: changes take effect on reboot.
+                                                </p>
+                                            </div>
+
+                                            {/* Image Quality */}
+                                            <div style={{ borderBottom: '1px solid #444', paddingBottom: '12px' }}>
+                                                <h4 style={{ margin: '0 0 10px 0', color: '#aaa', fontSize: '13px', textTransform: 'uppercase' }}>Image Quality</h4>
+                                                <CameraSlider label="Brightness" value={cameraSettings.brightness} min={-2} max={2} setting="brightness" onChange={updateCameraSetting} disabled={isUpdatingSetting} />
+                                                <CameraSlider label="Contrast" value={cameraSettings.contrast} min={-2} max={2} setting="contrast" onChange={updateCameraSetting} disabled={isUpdatingSetting} />
+                                                <CameraSlider label="Saturation" value={cameraSettings.saturation} min={-2} max={2} setting="saturation" onChange={updateCameraSetting} disabled={isUpdatingSetting} />
+                                                <CameraSelect label="Special Effect" value={cameraSettings.special_effect} options={SPECIAL_EFFECT_NAMES} setting="special_effect" onChange={updateCameraSetting} disabled={isUpdatingSetting} />
+                                            </div>
+
+                                            {/* White Balance */}
+                                            <div style={{ borderBottom: '1px solid #444', paddingBottom: '12px' }}>
+                                                <h4 style={{ margin: '0 0 10px 0', color: '#aaa', fontSize: '13px', textTransform: 'uppercase' }}>White Balance</h4>
+                                                <CameraToggle label="White Balance" value={cameraSettings.white_balance} setting="white_balance" onChange={updateCameraSetting} disabled={isUpdatingSetting} />
+                                                <CameraToggle label="AWB Gain" value={cameraSettings.awb_gain} setting="awb_gain" onChange={updateCameraSetting} disabled={isUpdatingSetting} />
+                                                <CameraSelect label="WB Mode" value={cameraSettings.wb_mode} options={WB_MODE_NAMES} setting="wb_mode" onChange={updateCameraSetting} disabled={isUpdatingSetting} />
+                                            </div>
+
+                                            {/* Exposure */}
+                                            <div style={{ borderBottom: '1px solid #444', paddingBottom: '12px' }}>
+                                                <h4 style={{ margin: '0 0 10px 0', color: '#aaa', fontSize: '13px', textTransform: 'uppercase' }}>Exposure</h4>
+                                                <CameraToggle label="Auto Exposure" value={cameraSettings.exposure_ctrl} setting="exposure_ctrl" onChange={updateCameraSetting} disabled={isUpdatingSetting} />
+                                                <CameraToggle label="AEC DSP" value={cameraSettings.aec2} setting="aec2" onChange={updateCameraSetting} disabled={isUpdatingSetting} />
+                                                <CameraSlider label="AE Level" value={cameraSettings.ae_level} min={-2} max={2} setting="ae_level" onChange={updateCameraSetting} disabled={isUpdatingSetting} />
+                                                <CameraSlider label="AEC Value" value={cameraSettings.aec_value} min={0} max={1200} setting="aec_value" onChange={updateCameraSetting} disabled={isUpdatingSetting} />
+                                            </div>
+
+                                            {/* Gain */}
+                                            <div style={{ borderBottom: '1px solid #444', paddingBottom: '12px' }}>
+                                                <h4 style={{ margin: '0 0 10px 0', color: '#aaa', fontSize: '13px', textTransform: 'uppercase' }}>Gain</h4>
+                                                <CameraToggle label="Auto Gain" value={cameraSettings.gain_ctrl} setting="gain_ctrl" onChange={updateCameraSetting} disabled={isUpdatingSetting} />
+                                                <CameraSlider label="AGC Gain" value={cameraSettings.agc_gain} min={0} max={30} setting="agc_gain" onChange={updateCameraSetting} disabled={isUpdatingSetting} />
+                                                <CameraSlider label="Gain Ceiling" value={cameraSettings.gain_ceiling} min={0} max={6} setting="gain_ceiling" onChange={updateCameraSetting} disabled={isUpdatingSetting} />
+                                            </div>
+
+                                            {/* Corrections */}
+                                            <div style={{ borderBottom: '1px solid #444', paddingBottom: '12px' }}>
+                                                <h4 style={{ margin: '0 0 10px 0', color: '#aaa', fontSize: '13px', textTransform: 'uppercase' }}>Corrections</h4>
+                                                <CameraToggle label="Bad Pixel Correction" value={cameraSettings.bpc} setting="bpc" onChange={updateCameraSetting} disabled={isUpdatingSetting} />
+                                                <CameraToggle label="White Pixel Correction" value={cameraSettings.wpc} setting="wpc" onChange={updateCameraSetting} disabled={isUpdatingSetting} />
+                                                <CameraToggle label="Gamma Correction" value={cameraSettings.raw_gma} setting="raw_gma" onChange={updateCameraSetting} disabled={isUpdatingSetting} />
+                                                <CameraToggle label="Lens Correction" value={cameraSettings.lenc} setting="lenc" onChange={updateCameraSetting} disabled={isUpdatingSetting} />
+                                                <CameraToggle label="Downsize Enable" value={cameraSettings.dcw} setting="dcw" onChange={updateCameraSetting} disabled={isUpdatingSetting} />
+                                            </div>
+
+                                            {/* Orientation */}
+                                            <div style={{ borderBottom: '1px solid #444', paddingBottom: '12px' }}>
+                                                <h4 style={{ margin: '0 0 10px 0', color: '#aaa', fontSize: '13px', textTransform: 'uppercase' }}>Orientation</h4>
+                                                <CameraToggle label="Horizontal Mirror" value={cameraSettings.hmirror} setting="hmirror" onChange={updateCameraSetting} disabled={isUpdatingSetting} />
+                                                <CameraToggle label="Vertical Flip" value={cameraSettings.vflip} setting="vflip" onChange={updateCameraSetting} disabled={isUpdatingSetting} />
+                                            </div>
+
+                                            {/* Test */}
+                                            <div>
+                                                <h4 style={{ margin: '0 0 10px 0', color: '#aaa', fontSize: '13px', textTransform: 'uppercase' }}>Test</h4>
+                                                <CameraToggle label="Color Bar" value={cameraSettings.colorbar} setting="colorbar" onChange={updateCameraSetting} disabled={isUpdatingSetting} />
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                         )}
                     </div>
