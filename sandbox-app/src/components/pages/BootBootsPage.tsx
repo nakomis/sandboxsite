@@ -219,7 +219,6 @@ const BootBootsPage = (props: BootBootProps) => {
                 console.log("Unhandled key:", event.key);
                 break;
         }
-        console.log("Key released:", event.key);
         event.preventDefault();
         event.stopPropagation();
         return false;
