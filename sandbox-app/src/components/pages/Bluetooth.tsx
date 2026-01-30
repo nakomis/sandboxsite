@@ -245,6 +245,9 @@ const BluetoothPage = (props: BluetoothProps) => {
     const [cameraSettings, setCameraSettings] = useState<CameraSettings>(DEFAULT_CAMERA_SETTINGS);
     const [cameraSettingsExpanded, setCameraSettingsExpanded] = useState<boolean>(false);
 
+    // Reboot state
+    const [isRebooting, setIsRebooting] = useState<boolean>(false);
+
     // Previously paired devices state
     const [pairedDevices, setPairedDevices] = useState<BluetoothDevice[]>([]);
     const [isReconnecting, setIsReconnecting] = useState<boolean>(false);
@@ -506,6 +509,19 @@ const BluetoothPage = (props: BluetoothProps) => {
                                 }
                                 setIsUpdatingSetting(false);
                             }
+                            // Handle reboot acknowledgment
+                            else if (responseJson.type === 'reboot_ack') {
+                                console.log('Device is rebooting...');
+                                setIsRebooting(false);
+                                setConnectionStatus("Disconnected");
+                                setConnection({
+                                    device: null, server: null, service: null,
+                                    statusCharacteristic: null, logsCharacteristic: null, commandCharacteristic: null
+                                });
+                                setSystemStatus(null);
+                                setLogData("");
+                                setLastUpdate(null);
+                            }
                         } catch {
                             // Not valid JSON - shouldn't happen
                             console.error('Received non-JSON response:', responseText);
@@ -728,6 +744,19 @@ const BluetoothPage = (props: BluetoothProps) => {
                                 }
                                 setIsUpdatingSetting(false);
                             }
+                            // Handle reboot acknowledgment
+                            else if (responseJson.type === 'reboot_ack') {
+                                console.log('Device is rebooting...');
+                                setIsRebooting(false);
+                                setConnectionStatus("Disconnected");
+                                setConnection({
+                                    device: null, server: null, service: null,
+                                    statusCharacteristic: null, logsCharacteristic: null, commandCharacteristic: null
+                                });
+                                setSystemStatus(null);
+                                setLogData("");
+                                setLastUpdate(null);
+                            }
                         } catch {
                             console.error('Received non-JSON response:', responseText);
                         }
@@ -918,6 +947,27 @@ const BluetoothPage = (props: BluetoothProps) => {
         }
     }, [connection.commandCharacteristic]);
 
+    // Reboot the device
+    const rebootDevice = useCallback(async () => {
+        if (!connection.commandCharacteristic) return;
+
+        if (!window.confirm('Are you sure you want to reboot the device?')) return;
+
+        setIsRebooting(true);
+        setError(null);
+
+        try {
+            const command = JSON.stringify({ command: "reboot" });
+            const encoder = new TextEncoder();
+            await connection.commandCharacteristic.writeValue(encoder.encode(command));
+            console.log('Sent reboot command');
+        } catch (err) {
+            console.error('Error sending reboot command:', err);
+            setError(`Failed to reboot device: ${err}`);
+            setIsRebooting(false);
+        }
+    }, [connection.commandCharacteristic]);
+
     // Request specific image from device
     const requestImage = useCallback(async (filename: string) => {
         if (!connection.commandCharacteristic || !filename) return;
@@ -1077,6 +1127,15 @@ const BluetoothPage = (props: BluetoothProps) => {
                                 style={{ marginLeft: '10px' }}
                             >
                                 {isTakingPhoto ? 'Capturing...' : 'Take Photo'}
+                            </button>
+                            <button
+                                type="button"
+                                className="btn btn-outline-danger"
+                                onClick={rebootDevice}
+                                disabled={isRebooting}
+                                style={{ marginLeft: '10px' }}
+                            >
+                                {isRebooting ? 'Rebooting...' : 'Reboot'}
                             </button>
                         </div>
                     )}
