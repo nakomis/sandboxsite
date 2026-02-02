@@ -97,9 +97,9 @@ Web Bluetooth communication with ESP32 devices.
 
 **BLE UUIDs:**
 ```
-OTA Service:    12345678-1234-1234-1234-123456789abc
-Command Char:   87654321-4321-4321-4321-cba987654321
-Status Char:    11111111-2222-3333-4444-555555555555
+OTA Service:    99db6ea6-27e4-434d-aafd-795cf95feb06  (NAKOMIS_ESP32_SERVICE_UUID)
+Command Char:   1ac886a6-5fff-41ea-9b11-25a7dcb93a7e  (NAKOMIS_ESP32_COMMAND_CHAR_UUID)
+Status Char:    5f5979f3-f1a6-4ce7-8360-e249c2e9333d  (NAKOMIS_ESP32_STATUS_CHAR_UUID)
 ```
 
 **OTA Commands:**
