@@ -32,11 +32,12 @@ export class BluetoothService {
      */
     async connect(): Promise<void> {
         try {
-            // Request device
+            // Request device - supports BootBoots and Kappa-Warmer devices
             this.device = await navigator.bluetooth.requestDevice({
                 filters: [
                     { name: 'BootBoots-CatCam' },
-                    { namePrefix: 'BootBoots' }
+                    { namePrefix: 'BootBoots' },
+                    { namePrefix: 'Kappa-Warmer' }
                 ],
                 optionalServices: [this.OTA_SERVICE_UUID]
             });
