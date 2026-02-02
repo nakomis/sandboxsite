@@ -22,12 +22,15 @@ export class BluetoothService {
     private statusCharacteristic: BluetoothRemoteGATTCharacteristic | null = null;
     private currentVersion: string = 'Unknown';
 
-    // Nakomis ESP32 OTA service UUIDs (shared across all Nakomis ESP32 projects)
+    // Main device service UUID (used for discovery - fits in advertising packet)
+    private readonly DEVICE_SERVICE_UUID = 'bb00b007-5af3-41c3-9689-2fc7175c1ba8';
+
+    // Nakomis ESP32 OTA service UUIDs (used for OTA communication after connection)
     private readonly NAKOMIS_ESP32_SERVICE_UUID = '99db6ea6-27e4-434d-aafd-795cf95feb06';
     private readonly NAKOMIS_ESP32_COMMAND_CHAR_UUID = '1ac886a6-5fff-41ea-9b11-25a7dcb93a7e';
     private readonly NAKOMIS_ESP32_STATUS_CHAR_UUID = '5f5979f3-f1a6-4ce7-8360-e249c2e9333d';
 
-    // Legacy aliases
+    // Aliases for OTA service
     private readonly OTA_SERVICE_UUID = this.NAKOMIS_ESP32_SERVICE_UUID;
     private readonly OTA_COMMAND_CHAR_UUID = this.NAKOMIS_ESP32_COMMAND_CHAR_UUID;
     private readonly OTA_STATUS_CHAR_UUID = this.NAKOMIS_ESP32_STATUS_CHAR_UUID;
@@ -37,10 +40,10 @@ export class BluetoothService {
      */
     async connect(): Promise<void> {
         try {
-            // Request device - filter by Nakomis ESP32 OTA service UUID
+            // Request device - filter by main device service (advertised), OTA service as optional
             this.device = await navigator.bluetooth.requestDevice({
                 filters: [
-                    { services: [this.NAKOMIS_ESP32_SERVICE_UUID] }
+                    { services: [this.DEVICE_SERVICE_UUID] }
                 ],
                 optionalServices: [this.OTA_SERVICE_UUID]
             });
