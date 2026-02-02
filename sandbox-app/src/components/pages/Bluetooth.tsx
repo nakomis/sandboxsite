@@ -101,6 +101,23 @@ interface BootBootsSystemStatus {
     };
 }
 
+// Kappa-Warmer status interface
+interface KappaWarmerStatus {
+    device: string;
+    state: string;
+    auto_mode: boolean;
+    pressure: number;
+    threshold: number;
+    cat_present: boolean;
+    relay_on: boolean;
+    uptime_ms: number;
+    wifi_connected: boolean;
+    sd_card_ready: boolean;
+}
+
+// Device type enum
+type DeviceType = 'bootboots' | 'kappa-warmer' | 'unknown';
+
 interface BluetoothConnection {
     device: BluetoothDevice | null;
     server: BluetoothRemoteGATTServer | null;
@@ -252,6 +269,13 @@ const BluetoothPage = (props: BluetoothProps) => {
     const [pairedDevices, setPairedDevices] = useState<BluetoothDevice[]>([]);
     const [isReconnecting, setIsReconnecting] = useState<boolean>(false);
 
+    // Device type detection
+    const [deviceType, setDeviceType] = useState<DeviceType>('unknown');
+
+    // Kappa-Warmer specific state
+    const [kappaStatus, setKappaStatus] = useState<KappaWarmerStatus | null>(null);
+    const [kappaExpanded, setKappaExpanded] = useState<boolean>(true);
+
     // // Debug: Log when logData changes
     // useEffect(() => {
     //     console.log('logData state changed:', logData);
@@ -265,7 +289,7 @@ const BluetoothPage = (props: BluetoothProps) => {
                 try {
                     const devices = await navigator.bluetooth.getDevices();
                     const bootbootsDevices = devices.filter(d =>
-                        d.name?.startsWith('BootBoots')
+                        d.name?.startsWith('BootBoots') || d.name?.startsWith('Kappa-Warmer')
                     );
                     setPairedDevices(bootbootsDevices);
                     console.log('Found previously paired devices:', bootbootsDevices.map(d => d.name));
@@ -304,12 +328,22 @@ const BluetoothPage = (props: BluetoothProps) => {
             const device = await navigator.bluetooth.requestDevice({
                 filters: [
                     { name: 'BootBoots-CatCam' },
-                    { namePrefix: 'BootBoots' }
+                    { namePrefix: 'BootBoots' },
+                    { namePrefix: 'Kappa-Warmer' }
                 ],
                 optionalServices: [BOOTBOOTS_SERVICE_UUID]
             });
 
-            console.log('Found BootBoots device:', device.name);
+            console.log('Found device:', device.name);
+
+            // Detect device type based on name
+            const detectedType: DeviceType = device.name?.startsWith('Kappa-Warmer')
+                ? 'kappa-warmer'
+                : device.name?.startsWith('BootBoots')
+                    ? 'bootboots'
+                    : 'unknown';
+            setDeviceType(detectedType);
+            console.log('Device type:', detectedType);
 
             // Connect to GATT server
             const server = await device.gatt!.connect();
@@ -317,12 +351,19 @@ const BluetoothPage = (props: BluetoothProps) => {
 
             // Get primary service
             const service = await server.getPrimaryService(BOOTBOOTS_SERVICE_UUID);
-            console.log('Got BootBoots service');
+            console.log('Got service');
 
-            // Get characteristics
+            // Get characteristics (logs is optional - Kappa-Warmer doesn't have it)
             const statusChar = await service.getCharacteristic(STATUS_CHARACTERISTIC_UUID);
-            const logsChar = await service.getCharacteristic(LOGS_CHARACTERISTIC_UUID);
             const commandChar = await service.getCharacteristic(COMMAND_CHARACTERISTIC_UUID);
+
+            // Try to get logs characteristic (optional)
+            let logsChar: BluetoothRemoteGATTCharacteristic | null = null;
+            try {
+                logsChar = await service.getCharacteristic(LOGS_CHARACTERISTIC_UUID);
+            } catch {
+                console.log('Logs characteristic not available (expected for Kappa-Warmer)');
+            }
 
             // Start notifications for status updates
             await statusChar.startNotifications();
@@ -522,6 +563,12 @@ const BluetoothPage = (props: BluetoothProps) => {
                                 setLogData("");
                                 setLastUpdate(null);
                             }
+                            // Handle Kappa-Warmer status response
+                            else if (responseJson.type === 'status' && responseJson.device === 'Kappa-Warmer') {
+                                console.log('Kappa-Warmer status received:', responseJson);
+                                setKappaStatus(responseJson as KappaWarmerStatus);
+                                setLastUpdate(new Date());
+                            }
                         } catch {
                             // Not valid JSON - shouldn't happen
                             console.error('Received non-JSON response:', responseText);
@@ -593,18 +640,34 @@ const BluetoothPage = (props: BluetoothProps) => {
 
             console.log('Attempting to reconnect to:', device.name);
 
+            // Detect device type based on name
+            const detectedType: DeviceType = device.name?.startsWith('Kappa-Warmer')
+                ? 'kappa-warmer'
+                : device.name?.startsWith('BootBoots')
+                    ? 'bootboots'
+                    : 'unknown';
+            setDeviceType(detectedType);
+            console.log('Device type:', detectedType);
+
             // Connect to GATT server
             const server = await device.gatt!.connect();
             console.log('Reconnected to GATT Server');
 
             // Get primary service
             const service = await server.getPrimaryService(BOOTBOOTS_SERVICE_UUID);
-            console.log('Got BootBoots service');
+            console.log('Got service');
 
-            // Get characteristics
+            // Get characteristics (logs is optional - Kappa-Warmer doesn't have it)
             const statusChar = await service.getCharacteristic(STATUS_CHARACTERISTIC_UUID);
-            const logsChar = await service.getCharacteristic(LOGS_CHARACTERISTIC_UUID);
             const commandChar = await service.getCharacteristic(COMMAND_CHARACTERISTIC_UUID);
+
+            // Try to get logs characteristic (optional)
+            let logsChar: BluetoothRemoteGATTCharacteristic | null = null;
+            try {
+                logsChar = await service.getCharacteristic(LOGS_CHARACTERISTIC_UUID);
+            } catch {
+                console.log('Logs characteristic not available (expected for Kappa-Warmer)');
+            }
 
             // Start notifications for status updates
             await statusChar.startNotifications();
@@ -757,6 +820,12 @@ const BluetoothPage = (props: BluetoothProps) => {
                                 setLogData("");
                                 setLastUpdate(null);
                             }
+                            // Handle Kappa-Warmer status response
+                            else if (responseJson.type === 'status' && responseJson.device === 'Kappa-Warmer') {
+                                console.log('Kappa-Warmer status received:', responseJson);
+                                setKappaStatus(responseJson as KappaWarmerStatus);
+                                setLastUpdate(new Date());
+                            }
                         } catch {
                             console.error('Received non-JSON response:', responseText);
                         }
@@ -780,7 +849,7 @@ const BluetoothPage = (props: BluetoothProps) => {
             setIsReconnecting(false);
 
         } catch (err) {
-            console.error('Error reconnecting to BootBoots:', err);
+            console.error('Error reconnecting:', err);
             setError(`Reconnection failed: ${err}`);
             setConnectionStatus("Disconnected");
             setIsReconnecting(false);
@@ -1141,8 +1210,235 @@ const BluetoothPage = (props: BluetoothProps) => {
                     )}
                 </div>
 
-                {/* Device Settings */}
-                {connection.device && (
+                {/* Kappa-Warmer Controls */}
+                {connection.device && deviceType === 'kappa-warmer' && (
+                    <div className="kappa-controls" style={{ marginTop: '20px' }}>
+                        <div
+                            onClick={() => setKappaExpanded(!kappaExpanded)}
+                            style={{
+                                cursor: 'pointer',
+                                display: 'flex',
+                                alignItems: 'center',
+                                marginBottom: '10px'
+                            }}
+                        >
+                            <span style={{
+                                transform: kappaExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
+                                transition: 'transform 0.2s',
+                                marginRight: '8px',
+                                fontSize: '14px'
+                            }}>▶</span>
+                            <h3 style={{ margin: 0 }}>Kappa-Warmer Controls</h3>
+                        </div>
+
+                        {kappaExpanded && (
+                            <div style={{
+                                border: '1px solid #444',
+                                borderRadius: '8px',
+                                padding: '15px',
+                                backgroundColor: '#282c34'
+                            }}>
+                                {/* Status Display */}
+                                {kappaStatus ? (
+                                    <div style={{ marginBottom: '20px' }}>
+                                        <div style={{
+                                            display: 'grid',
+                                            gridTemplateColumns: 'repeat(2, 1fr)',
+                                            gap: '12px',
+                                            marginBottom: '15px'
+                                        }}>
+                                            <div style={{
+                                                padding: '12px',
+                                                backgroundColor: '#1a1a2e',
+                                                borderRadius: '6px',
+                                                textAlign: 'center'
+                                            }}>
+                                                <div style={{ fontSize: '11px', color: '#888', textTransform: 'uppercase', marginBottom: '4px' }}>State</div>
+                                                <div style={{
+                                                    fontSize: '16px',
+                                                    fontWeight: 'bold',
+                                                    color: kappaStatus.state === 'ON' ? '#4CAF50' : kappaStatus.state === 'WARMING_UP' ? '#ff9800' : '#e0e0e0'
+                                                }}>
+                                                    {kappaStatus.state}
+                                                </div>
+                                            </div>
+                                            <div style={{
+                                                padding: '12px',
+                                                backgroundColor: '#1a1a2e',
+                                                borderRadius: '6px',
+                                                textAlign: 'center'
+                                            }}>
+                                                <div style={{ fontSize: '11px', color: '#888', textTransform: 'uppercase', marginBottom: '4px' }}>Cat Present</div>
+                                                <div style={{
+                                                    fontSize: '16px',
+                                                    fontWeight: 'bold',
+                                                    color: kappaStatus.cat_present ? '#4CAF50' : '#888'
+                                                }}>
+                                                    {kappaStatus.cat_present ? 'YES' : 'NO'}
+                                                </div>
+                                            </div>
+                                            <div style={{
+                                                padding: '12px',
+                                                backgroundColor: '#1a1a2e',
+                                                borderRadius: '6px',
+                                                textAlign: 'center'
+                                            }}>
+                                                <div style={{ fontSize: '11px', color: '#888', textTransform: 'uppercase', marginBottom: '4px' }}>Pressure</div>
+                                                <div style={{ fontSize: '16px', fontWeight: 'bold', color: '#e0e0e0' }}>
+                                                    {kappaStatus.pressure}
+                                                </div>
+                                                <div style={{ fontSize: '10px', color: '#666' }}>threshold: {kappaStatus.threshold}</div>
+                                            </div>
+                                            <div style={{
+                                                padding: '12px',
+                                                backgroundColor: '#1a1a2e',
+                                                borderRadius: '6px',
+                                                textAlign: 'center'
+                                            }}>
+                                                <div style={{ fontSize: '11px', color: '#888', textTransform: 'uppercase', marginBottom: '4px' }}>Relay</div>
+                                                <div style={{
+                                                    fontSize: '16px',
+                                                    fontWeight: 'bold',
+                                                    color: kappaStatus.relay_on ? '#4CAF50' : '#888'
+                                                }}>
+                                                    {kappaStatus.relay_on ? 'ON' : 'OFF'}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Mode Toggle */}
+                                        <div style={{
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'space-between',
+                                            padding: '12px',
+                                            backgroundColor: '#1a1a2e',
+                                            borderRadius: '6px',
+                                            marginBottom: '12px'
+                                        }}>
+                                            <div>
+                                                <div style={{ fontWeight: 'bold', color: '#e0e0e0' }}>Auto Mode</div>
+                                                <div style={{ fontSize: '12px', color: '#888' }}>
+                                                    Automatically control heater based on cat presence
+                                                </div>
+                                            </div>
+                                            <label style={{ position: 'relative', display: 'inline-block', width: '50px', height: '26px', flexShrink: 0, marginLeft: '15px' }}>
+                                                <input
+                                                    type="checkbox"
+                                                    checked={kappaStatus.auto_mode}
+                                                    onChange={async () => {
+                                                        if (connection.commandCharacteristic) {
+                                                            const cmd = JSON.stringify({ command: 'set_auto', enabled: !kappaStatus.auto_mode });
+                                                            await connection.commandCharacteristic.writeValue(new TextEncoder().encode(cmd));
+                                                        }
+                                                    }}
+                                                    style={{ opacity: 0, width: 0, height: 0 }}
+                                                />
+                                                <span style={{
+                                                    position: 'absolute', cursor: 'pointer',
+                                                    top: 0, left: 0, right: 0, bottom: 0,
+                                                    backgroundColor: kappaStatus.auto_mode ? '#4CAF50' : '#555',
+                                                    transition: '0.3s', borderRadius: '26px'
+                                                }}>
+                                                    <span style={{
+                                                        position: 'absolute', height: '20px', width: '20px',
+                                                        left: kappaStatus.auto_mode ? '27px' : '3px', bottom: '3px',
+                                                        backgroundColor: 'white', transition: '0.3s', borderRadius: '50%'
+                                                    }}></span>
+                                                </span>
+                                            </label>
+                                        </div>
+
+                                        {/* Manual Heater Control (only when not in auto mode) */}
+                                        {!kappaStatus.auto_mode && (
+                                            <div style={{
+                                                display: 'flex',
+                                                gap: '10px',
+                                                marginBottom: '12px'
+                                            }}>
+                                                <button
+                                                    type="button"
+                                                    onClick={async () => {
+                                                        if (connection.commandCharacteristic) {
+                                                            const cmd = JSON.stringify({ command: 'set_heater', on: true });
+                                                            await connection.commandCharacteristic.writeValue(new TextEncoder().encode(cmd));
+                                                        }
+                                                    }}
+                                                    style={{
+                                                        flex: 1,
+                                                        padding: '10px',
+                                                        backgroundColor: kappaStatus.relay_on ? '#4CAF50' : '#333',
+                                                        color: 'white',
+                                                        border: 'none',
+                                                        borderRadius: '6px',
+                                                        cursor: 'pointer',
+                                                        fontWeight: 'bold'
+                                                    }}
+                                                >
+                                                    Heater ON
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={async () => {
+                                                        if (connection.commandCharacteristic) {
+                                                            const cmd = JSON.stringify({ command: 'set_heater', on: false });
+                                                            await connection.commandCharacteristic.writeValue(new TextEncoder().encode(cmd));
+                                                        }
+                                                    }}
+                                                    style={{
+                                                        flex: 1,
+                                                        padding: '10px',
+                                                        backgroundColor: !kappaStatus.relay_on ? '#f44336' : '#333',
+                                                        color: 'white',
+                                                        border: 'none',
+                                                        borderRadius: '6px',
+                                                        cursor: 'pointer',
+                                                        fontWeight: 'bold'
+                                                    }}
+                                                >
+                                                    Heater OFF
+                                                </button>
+                                            </div>
+                                        )}
+
+                                        {/* Status info */}
+                                        <div style={{ fontSize: '12px', color: '#666', display: 'flex', gap: '15px' }}>
+                                            <span>WiFi: {kappaStatus.wifi_connected ? '✓' : '✗'}</span>
+                                            <span>SD Card: {kappaStatus.sd_card_ready ? '✓' : '✗'}</span>
+                                            <span>Uptime: {Math.floor(kappaStatus.uptime_ms / 1000 / 60)}m</span>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div style={{ color: '#888', textAlign: 'center', padding: '20px' }}>
+                                        <p>No status received yet.</p>
+                                        <button
+                                            type="button"
+                                            onClick={async () => {
+                                                if (connection.commandCharacteristic) {
+                                                    const cmd = JSON.stringify({ command: 'get_status' });
+                                                    await connection.commandCharacteristic.writeValue(new TextEncoder().encode(cmd));
+                                                }
+                                            }}
+                                            style={{
+                                                padding: '8px 16px',
+                                                backgroundColor: '#4CAF50',
+                                                color: 'white',
+                                                border: 'none',
+                                                borderRadius: '4px',
+                                                cursor: 'pointer'
+                                            }}
+                                        >
+                                            Request Status
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* BootBoots Settings */}
+                {connection.device && deviceType === 'bootboots' && (
                     <div className="device-settings" style={{ marginTop: '20px' }}>
                         <div
                             onClick={() => setSettingsExpanded(!settingsExpanded)}
@@ -1159,7 +1455,7 @@ const BluetoothPage = (props: BluetoothProps) => {
                                 marginRight: '8px',
                                 fontSize: '14px'
                             }}>▶</span>
-                            <h3 style={{ margin: 0 }}>Device Settings</h3>
+                            <h3 style={{ margin: 0 }}>BootBoots Settings</h3>
                         </div>
 
                         {settingsExpanded && (
