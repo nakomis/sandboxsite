@@ -324,12 +324,10 @@ const BluetoothPage = (props: BluetoothProps) => {
             setConnectionStatus("Connecting...");
             setError(null);
 
-            // Request device - filter by name instead of service UUID for better compatibility
+            // Request device - filter by service UUID for reliable discovery of Nakomis ESP32 devices
             const device = await navigator.bluetooth.requestDevice({
                 filters: [
-                    { name: 'BootBoots-CatCam' },
-                    { namePrefix: 'BootBoots' },
-                    { namePrefix: 'Kappa-Warmer' }
+                    { services: [BOOTBOOTS_SERVICE_UUID] }
                 ],
                 optionalServices: [BOOTBOOTS_SERVICE_UUID]
             });

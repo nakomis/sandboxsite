@@ -22,22 +22,25 @@ export class BluetoothService {
     private statusCharacteristic: BluetoothRemoteGATTCharacteristic | null = null;
     private currentVersion: string = 'Unknown';
 
-    // UUIDs for BootBoots OTA service
-    private readonly OTA_SERVICE_UUID = '12345678-1234-1234-1234-123456789abc';
-    private readonly OTA_COMMAND_CHAR_UUID = '87654321-4321-4321-4321-cba987654321';
-    private readonly OTA_STATUS_CHAR_UUID = '11111111-2222-3333-4444-555555555555';
+    // Nakomis ESP32 OTA service UUIDs (shared across all Nakomis ESP32 projects)
+    private readonly NAKOMIS_ESP32_SERVICE_UUID = '99db6ea6-27e4-434d-aafd-795cf95feb06';
+    private readonly NAKOMIS_ESP32_COMMAND_CHAR_UUID = '1ac886a6-5fff-41ea-9b11-25a7dcb93a7e';
+    private readonly NAKOMIS_ESP32_STATUS_CHAR_UUID = '5f5979f3-f1a6-4ce7-8360-e249c2e9333d';
+
+    // Legacy aliases
+    private readonly OTA_SERVICE_UUID = this.NAKOMIS_ESP32_SERVICE_UUID;
+    private readonly OTA_COMMAND_CHAR_UUID = this.NAKOMIS_ESP32_COMMAND_CHAR_UUID;
+    private readonly OTA_STATUS_CHAR_UUID = this.NAKOMIS_ESP32_STATUS_CHAR_UUID;
 
     /**
      * Connect to BootBoots device via Bluetooth
      */
     async connect(): Promise<void> {
         try {
-            // Request device - supports BootBoots and Kappa-Warmer devices
+            // Request device - filter by Nakomis ESP32 OTA service UUID
             this.device = await navigator.bluetooth.requestDevice({
                 filters: [
-                    { name: 'BootBoots-CatCam' },
-                    { namePrefix: 'BootBoots' },
-                    { namePrefix: 'Kappa-Warmer' }
+                    { services: [this.NAKOMIS_ESP32_SERVICE_UUID] }
                 ],
                 optionalServices: [this.OTA_SERVICE_UUID]
             });
