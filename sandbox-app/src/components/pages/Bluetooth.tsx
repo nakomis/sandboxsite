@@ -41,6 +41,7 @@ interface CameraSettings {
     vflip: boolean;
     dcw: boolean;
     colorbar: boolean;
+    led_delay_millis: number;
 }
 
 const DEFAULT_CAMERA_SETTINGS: CameraSettings = {
@@ -50,7 +51,8 @@ const DEFAULT_CAMERA_SETTINGS: CameraSettings = {
     exposure_ctrl: true, aec2: false, ae_level: -2, aec_value: 300,
     gain_ctrl: true, agc_gain: 15, gain_ceiling: 0,
     bpc: false, wpc: true, raw_gma: true, lenc: true,
-    hmirror: false, vflip: false, dcw: true, colorbar: false
+    hmirror: false, vflip: false, dcw: true, colorbar: false,
+    led_delay_millis: 100
 };
 
 const SPECIAL_EFFECT_NAMES = ['None', 'Negative', 'Grayscale', 'Red Tint', 'Green Tint', 'Blue Tint', 'Sepia'];
@@ -131,25 +133,76 @@ interface BluetoothConnection {
 const CameraSlider = ({ label, value, min, max, setting, onChange, disabled }: {
     label: string; value: number; min: number; max: number; setting: string;
     onChange: (setting: string, value: number) => void; disabled: boolean;
-}) => (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
-        <label style={{ fontSize: '13px', color: '#e0e0e0', minWidth: '120px' }}>{label}</label>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <span style={{ fontSize: '11px', color: '#888', minWidth: '20px', textAlign: 'right' }}>{min}</span>
-            <input
-                type="range"
-                min={min}
-                max={max}
-                value={value}
-                onChange={(e) => onChange(setting, parseInt(e.target.value))}
-                disabled={disabled}
-                style={{ width: '120px', cursor: disabled ? 'wait' : 'pointer' }}
-            />
-            <span style={{ fontSize: '11px', color: '#888', minWidth: '20px' }}>{max}</span>
-            <span style={{ fontSize: '13px', color: '#4CAF50', minWidth: '35px', textAlign: 'right', fontWeight: 'bold' }}>{value}</span>
+}) => {
+    const [inputValue, setInputValue] = useState(value.toString());
+
+    // Update input when external value changes
+    useEffect(() => {
+        setInputValue(value.toString());
+    }, [value]);
+
+    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setInputValue(e.target.value);
+    };
+
+    const handleInputBlur = () => {
+        const parsed = parseInt(inputValue);
+        if (!isNaN(parsed)) {
+            const clamped = Math.max(min, Math.min(max, parsed));
+            setInputValue(clamped.toString());
+            if (clamped !== value) {
+                onChange(setting, clamped);
+            }
+        } else {
+            setInputValue(value.toString());
+        }
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter') {
+            (e.target as HTMLInputElement).blur();
+        }
+    };
+
+    return (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '8px' }}>
+            <label style={{ fontSize: '13px', color: '#e0e0e0', minWidth: '120px' }}>{label}</label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span style={{ fontSize: '11px', color: '#888', minWidth: '20px', textAlign: 'right' }}>{min}</span>
+                <input
+                    type="range"
+                    min={min}
+                    max={max}
+                    value={value}
+                    onChange={(e) => onChange(setting, parseInt(e.target.value))}
+                    disabled={disabled}
+                    style={{ width: '120px', cursor: disabled ? 'wait' : 'pointer' }}
+                />
+                <span style={{ fontSize: '11px', color: '#888', minWidth: '20px' }}>{max}</span>
+                <input
+                    type="text"
+                    value={inputValue}
+                    onChange={handleInputChange}
+                    onBlur={handleInputBlur}
+                    onKeyDown={handleKeyDown}
+                    disabled={disabled}
+                    style={{
+                        width: '45px',
+                        fontSize: '13px',
+                        color: '#4CAF50',
+                        fontWeight: 'bold',
+                        textAlign: 'right',
+                        backgroundColor: '#2a2a2a',
+                        border: '1px solid #444',
+                        borderRadius: '4px',
+                        padding: '2px 4px',
+                        cursor: disabled ? 'wait' : 'text'
+                    }}
+                />
+            </div>
         </div>
-    </div>
-);
+    );
+};
 
 const CameraToggle = ({ label, value, setting, onChange, disabled }: {
     label: string; value: boolean; setting: string;
@@ -307,11 +360,13 @@ const BluetoothPage = (props: BluetoothProps) => {
             const characteristic = event.target as BluetoothRemoteGATTCharacteristic;
             const value = await characteristic.readValue();
             const statusJson = new TextDecoder().decode(value);
-            const status = JSON.parse(statusJson) as BootBootsSystemStatus;
+            if (statusJson) {
+                const status = JSON.parse(statusJson) as BootBootsSystemStatus;
 
-            setSystemStatus(status);
-            setLastUpdate(new Date());
-            setError(null);
+                setSystemStatus(status);
+                setLastUpdate(new Date());
+                setError(null);
+            }
         } catch (err) {
             console.error('Error parsing status update:', err);
             setError('Failed to parse status update');
@@ -861,9 +916,11 @@ const BluetoothPage = (props: BluetoothProps) => {
         try {
             const value = await connection.statusCharacteristic.readValue();
             const statusJson = new TextDecoder().decode(value);
-            const status = JSON.parse(statusJson) as BootBootsSystemStatus;
-            setSystemStatus(status);
-            setLastUpdate(new Date());
+            if (statusJson) {
+                const status = JSON.parse(statusJson) as BootBootsSystemStatus;
+                setSystemStatus(status);
+                setLastUpdate(new Date());
+            }
         } catch (err) {
             console.error('Error reading status:', err);
             setError('Failed to read status');
@@ -1638,6 +1695,13 @@ const BluetoothPage = (props: BluetoothProps) => {
                                                 <h4 style={{ margin: '0 0 10px 0', color: '#aaa', fontSize: '13px', textTransform: 'uppercase' }}>Test</h4>
                                                 <CameraToggle label="Color Bar" value={cameraSettings.colorbar} setting="colorbar" onChange={updateCameraSetting} disabled={isUpdatingSetting} />
                                             </div>
+
+                                            {/* Flash */}
+                                            <div style={{ borderBottom: '1px solid #444', paddingBottom: '12px' }}>
+                                                <h4 style={{ margin: '0 0 10px 0', color: '#aaa', fontSize: '13px', textTransform: 'uppercase' }}>Flash</h4>
+                                                <CameraSlider label="LED Delay (millis)" value={cameraSettings.led_delay_millis} min={0} max={1000} setting="led_delay_millis" onChange={updateCameraSetting} disabled={isUpdatingSetting} />
+                                            </div>
+
                                         </div>
                                     )}
                                 </div>

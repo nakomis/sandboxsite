@@ -1,0 +1,5 @@
+div > label {
+  /*width: 120px; Adjust based on your longest label*/
+  display: inline-flex;
+  flex-shrink: 0;
+}
