@@ -25,7 +25,7 @@ export class FirmwareService {
     private bucketName: string;
     private region: string;
 
-    constructor(region: string = 'eu-west-2', bucketName: string = 'bootboots-firmware-updates') {
+    constructor(region: string = 'eu-west-2', bucketName: string = 'nakomis-firmware-updates') {
         this.region = region;
         this.bucketName = bucketName;
     }

@@ -1,11 +1,13 @@
 import * as cdk from 'aws-cdk-lib';
 import * as cm from 'aws-cdk-lib/aws-certificatemanager';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
+import * as iam from 'aws-cdk-lib/aws-iam';
 import * as route53 from 'aws-cdk-lib/aws-route53';
 import * as targets from 'aws-cdk-lib/aws-route53-targets';
 import { ITable, Table } from 'aws-cdk-lib/aws-dynamodb';
 import { Bucket } from 'aws-cdk-lib/aws-s3';
 import { Construct } from 'constructs';
+import { FIRMWARE_BUCKET_NAME } from './firmware-bucket-stack';
 
 export interface CognitoStackProps extends cdk.StackProps {
     authDomainName: string;
@@ -94,6 +96,24 @@ export class CognitoStack extends cdk.Stack {
 
         catadataTable.grantReadWriteData(this.userRole);
         catBucket.grantRead(this.userRole);
+
+        // Grant access to firmware bucket for OTA updates
+        const firmwareBucketArn = `arn:aws:s3:::${FIRMWARE_BUCKET_NAME}`;
+        this.userRole.addToPolicy(new iam.PolicyStatement({
+            effect: iam.Effect.ALLOW,
+            actions: [
+                's3:GetObject',
+                's3:GetObjectVersion',
+                's3:ListBucket',
+                's3:ListBucketVersions',
+                's3:PutObject',
+                's3:PutObjectAcl',
+                's3:DeleteObject',
+                's3:DeleteObjectVersion',
+                's3:GetObjectAttributes'
+            ],
+            resources: [firmwareBucketArn, `${firmwareBucketArn}/*`]
+        }));
 
         new cognito.CfnIdentityPoolRoleAttachment(this, 'SandboxIdentityPoolRoleAttachment', {
             identityPoolId: identityPool.ref,
