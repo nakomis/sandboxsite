@@ -11,6 +11,7 @@ interface FirmwareVersion {
 interface FirmwareManifest {
     project: string;
     versions: FirmwareVersion[];
+    internal?: boolean;  // If true, project is hidden from UI (e.g., bootloader)
 }
 
 export interface FirmwareProject {
@@ -48,12 +49,12 @@ export class FirmwareService {
     }
 
     /**
-     * List available firmware projects
+     * List available firmware projects (excludes internal projects like bootloader)
      */
     async listProjects(creds: any): Promise<FirmwareProject[]> {
         try {
             this.initializeS3Client(creds);
-            
+
             if (!this.s3Client) {
                 throw new Error('S3 client not initialized');
             }
@@ -68,14 +69,35 @@ export class FirmwareService {
             const projects: FirmwareProject[] = [];
 
             if (response.CommonPrefixes) {
-                for (const prefix of response.CommonPrefixes) {
-                    if (prefix.Prefix) {
-                        const projectName = prefix.Prefix.replace('/', '');
-                        projects.push({
-                            name: projectName,
-                            displayName: projectName.charAt(0).toUpperCase() + projectName.slice(1),
-                            lastUpdated: undefined
-                        });
+                // Check each project's manifest to filter out internal projects
+                const projectChecks = response.CommonPrefixes.map(async (prefix) => {
+                    if (!prefix.Prefix) return null;
+
+                    const projectName = prefix.Prefix.replace('/', '');
+
+                    // Try to load manifest to check if project is internal
+                    try {
+                        const manifest = await this.loadFirmwareManifest(projectName, creds);
+                        if (manifest.internal === true) {
+                            console.log(`Filtering out internal project: ${projectName}`);
+                            return null;  // Skip internal projects
+                        }
+                    } catch (err) {
+                        // If manifest doesn't exist or can't be loaded, include the project
+                        console.warn(`Could not load manifest for ${projectName}, including in list`);
+                    }
+
+                    return {
+                        name: projectName,
+                        displayName: projectName.charAt(0).toUpperCase() + projectName.slice(1),
+                        lastUpdated: undefined
+                    } as FirmwareProject;
+                });
+
+                const results = await Promise.all(projectChecks);
+                for (const project of results) {
+                    if (project !== null) {
+                        projects.push(project);
                     }
                 }
             }
