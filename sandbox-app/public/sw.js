@@ -1,7 +1,7 @@
-import process from "node:process";
 // BootBoots Web App Service Worker for OTA Updates
-// Version will be replaced during build process
-const CACHE_NAME = 'bootboots-v' + (process.env.REACT_APP_VERSION || '1.0.0');
+// Cache version - update this when deploying new versions
+const CACHE_VERSION = '1.0.0';
+const CACHE_NAME = 'bootboots-v' + CACHE_VERSION;
 const urlsToCache = [
   '/',
   '/static/js/bundle.js',
