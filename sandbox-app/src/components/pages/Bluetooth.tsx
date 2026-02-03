@@ -279,6 +279,8 @@ const BluetoothPage = (props: BluetoothProps) => {
     const [error, setError] = useState<string | null>(null);
     const [isLoadingLogs, setIsLoadingLogs] = useState<boolean>(false);
     const [logChunks, setLogChunks] = useState<string[]>([]);
+    const [logsDropdownOpen, setLogsDropdownOpen] = useState<boolean>(false);
+    const logsDropdownRef = useRef<HTMLDivElement>(null);
 
     // Image state
     const [imageList, setImageList] = useState<string[]>([]);
@@ -353,6 +355,23 @@ const BluetoothPage = (props: BluetoothProps) => {
         };
         checkPairedDevices();
     }, []);
+
+    // Close logs dropdown when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (logsDropdownRef.current && !logsDropdownRef.current.contains(event.target as Node)) {
+                setLogsDropdownOpen(false);
+            }
+        };
+
+        if (logsDropdownOpen) {
+            document.addEventListener('mousedown', handleClickOutside);
+        }
+
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [logsDropdownOpen]);
 
     // Handle status characteristic notifications
     const handleStatusUpdate = useCallback(async (event: Event) => {
@@ -928,7 +947,8 @@ const BluetoothPage = (props: BluetoothProps) => {
     }, [connection.statusCharacteristic]);
 
     // Request logs - sends command and waits for notification response
-    const requestLogs = useCallback(async () => {
+    // entries: number of log entries to fetch, or null/undefined for all
+    const requestLogs = useCallback(async (entries?: number | null) => {
         if (!connection.commandCharacteristic) {
             console.log('No command characteristic available');
             return;
@@ -940,7 +960,11 @@ const BluetoothPage = (props: BluetoothProps) => {
 
         try {
             console.log('Sending request_logs command...');
-            const command = JSON.stringify({ command: "request_logs", entries: 150 });
+            const commandObj: { command: string; entries?: number } = { command: "request_logs" };
+            if (entries !== null && entries !== undefined) {
+                commandObj.entries = entries;
+            }
+            const command = JSON.stringify(commandObj);
             const encoder = new TextEncoder();
             await connection.commandCharacteristic.writeValue(encoder.encode(command));
             console.log(`Command sent: ${command}, waiting for notification response...`);
@@ -1217,15 +1241,53 @@ const BluetoothPage = (props: BluetoothProps) => {
                             >
                                 Refresh Status
                             </button>
-                            <button
-                                type="button"
-                                className="btn btn-info"
-                                onClick={requestLogs}
-                                disabled={isLoadingLogs}
-                                style={{ marginLeft: '10px' }}
-                            >
-                                {isLoadingLogs ? 'Loading...' : 'Get Logs'}
-                            </button>
+                            <div className="btn-group" style={{ marginLeft: '10px' }} ref={logsDropdownRef}>
+                                <button
+                                    type="button"
+                                    className="btn btn-info"
+                                    onClick={() => requestLogs(150)}
+                                    disabled={isLoadingLogs}
+                                >
+                                    {isLoadingLogs ? 'Loading...' : 'Get Logs'}
+                                </button>
+                                <button
+                                    type="button"
+                                    className="btn btn-info dropdown-toggle dropdown-toggle-split"
+                                    onClick={() => setLogsDropdownOpen(!logsDropdownOpen)}
+                                    disabled={isLoadingLogs}
+                                    aria-expanded={logsDropdownOpen}
+                                >
+                                    <span className="visually-hidden">Toggle Dropdown</span>
+                                </button>
+                                {logsDropdownOpen && (
+                                    <ul className="dropdown-menu show" style={{ position: 'absolute', top: '100%', right: 0 }}>
+                                        <li>
+                                            <button
+                                                className="dropdown-item"
+                                                onClick={() => { requestLogs(50); setLogsDropdownOpen(false); }}
+                                            >
+                                                Last 50 entries
+                                            </button>
+                                        </li>
+                                        <li>
+                                            <button
+                                                className="dropdown-item"
+                                                onClick={() => { requestLogs(150); setLogsDropdownOpen(false); }}
+                                            >
+                                                Last 150 entries
+                                            </button>
+                                        </li>
+                                        <li>
+                                            <button
+                                                className="dropdown-item"
+                                                onClick={() => { requestLogs(null); setLogsDropdownOpen(false); }}
+                                            >
+                                                Entire log file
+                                            </button>
+                                        </li>
+                                    </ul>
+                                )}
+                            </div>
                             <button
                                 type="button"
                                 className="btn btn-success"
