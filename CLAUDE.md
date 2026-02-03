@@ -171,7 +171,7 @@ npm run deploy:major   # X.0.0
 
 **S3 Buckets:**
 - Web hosting bucket (via CloudFront stack output)
-- `bootboots-firmware-updates` - Firmware storage (public read for ESP32)
+- `nakomis-firmware-updates` - Firmware storage (public read for ESP32)
 
 **Cognito:**
 - User Pool: `SandboxUserPool`
