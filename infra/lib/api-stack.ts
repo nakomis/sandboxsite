@@ -101,9 +101,10 @@ export class ApiStack extends cdk.Stack {
         });
 
         // Add Gateway Responses for CORS on errors (required for IAM auth)
-        // Using '*' to support both production and localhost origins
+        // Note: Gateway Responses can't be dynamic, so using production origin
+        // Localhost error responses will be blocked by CORS but main functionality works
         const corsResponseHeaders = {
-            'Access-Control-Allow-Origin': "'*'",
+            'Access-Control-Allow-Origin': "'https://sandbox.nakomis.com'",
             'Access-Control-Allow-Headers': "'Content-Type,Authorization,X-Amz-Date,X-Amz-Security-Token,X-Amz-Content-Sha256'",
             'Access-Control-Allow-Methods': "'GET,POST,PUT,DELETE,OPTIONS'",
         };
