@@ -67,36 +67,42 @@ const FirmwareManager: React.FC<FirmwareManagerProps> = ({ ...pageProps }) => {
         loadProjects();
     }, [pageProps.creds]);
 
+    // Load firmware versions
+    const loadVersions = async (preserveSelection: boolean = false) => {
+        if (!selectedProject || !pageProps.creds) {
+            setManifest(null);
+            setSelectedVersion('');
+            return;
+        }
+
+        try {
+            setError(null);
+            setLoadingVersions(true);
+            const manifestData = await firmwareService.loadFirmwareManifest(selectedProject, pageProps.creds);
+            setManifest(manifestData);
+
+            if (manifestData.versions.length > 0) {
+                setSelectedVersion(manifestData.versions[0].version);
+            }
+        } catch (err) {
+            console.error('Error loading firmware versions:', err);
+            setError(`Failed to load firmware versions for ${selectedProject}: ${err}`);
+            setManifest(null);
+            setSelectedVersion('');
+        } finally {
+            setLoadingVersions(false);
+        }
+    };
+
     // Load firmware versions when project is selected
     useEffect(() => {
-        const loadVersions = async () => {
-            if (!selectedProject || !pageProps.creds) {
-                setManifest(null);
-                setSelectedVersion('');
-                return;
-            }
-
-            try {
-                setError(null);
-                setLoadingVersions(true);
-                const manifestData = await firmwareService.loadFirmwareManifest(selectedProject, pageProps.creds);
-                setManifest(manifestData);
-                
-                if (manifestData.versions.length > 0) {
-                    setSelectedVersion(manifestData.versions[0].version);
-                }
-            } catch (err) {
-                console.error('Error loading firmware versions:', err);
-                setError(`Failed to load firmware versions for ${selectedProject}: ${err}`);
-                setManifest(null);
-                setSelectedVersion('');
-            } finally {
-                setLoadingVersions(false);
-            }
-        };
-
         loadVersions();
     }, [selectedProject, pageProps.creds]);
+
+    // Refresh versions list
+    const refreshVersions = () => {
+        loadVersions();
+    };
 
     const handleProjectChange = (event: React.ChangeEvent<HTMLSelectElement>) => {
         setSelectedProject(event.target.value);
@@ -270,17 +276,27 @@ const FirmwareManager: React.FC<FirmwareManagerProps> = ({ ...pageProps }) => {
                         ) : manifest && manifest.versions.length > 0 ? (
                             <div className="version-selector">
                                 <label htmlFor="version-select">Version:</label>
-                                <select
-                                    id="version-select"
-                                    value={selectedVersion}
-                                    onChange={handleVersionChange}
-                                >
-                                    {manifest.versions.map(version => (
-                                        <option key={version.version} value={version.version}>
-                                            v{version.version} ({new Date(version.timestamp).toLocaleDateString()})
-                                        </option>
-                                    ))}
-                                </select>
+                                <div className="version-select-row">
+                                    <select
+                                        id="version-select"
+                                        value={selectedVersion}
+                                        onChange={handleVersionChange}
+                                    >
+                                        {manifest.versions.map(version => (
+                                            <option key={version.version} value={version.version}>
+                                                v{version.version} ({new Date(version.timestamp).toLocaleDateString()})
+                                            </option>
+                                        ))}
+                                    </select>
+                                    <button
+                                        className="refresh-button"
+                                        onClick={refreshVersions}
+                                        disabled={loadingVersions}
+                                        title="Refresh version list"
+                                    >
+                                        {loadingVersions ? '...' : '↻'}
+                                    </button>
+                                </div>
                                 
                                 {selectedVersion && (
                                     <div className="version-details" style={{ marginTop: '20px' }}>

@@ -145,8 +145,13 @@
     color: #bdbdbd;
 }
 
+.version-select-row {
+    display: flex;
+    align-items: center;
+}
+
 .version-selector select {
-    width: 100%;
+    flex: 1;
     padding: 10px;
     border: 2px solid #404a52;
     border-radius: 8px;
@@ -160,6 +165,35 @@
     outline: none;
     border-color: #546e7a;
     box-shadow: 0 0 0 3px rgba(84, 110, 122, 0.2);
+}
+
+.version-selector .refresh-button {
+    padding: 10px 14px;
+    margin-left: 8px;
+    border: 2px solid #404a52;
+    border-radius: 8px;
+    font-size: 18px;
+    background-color: #3a4650;
+    color: #90caf9;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.version-selector .refresh-button:hover:not(:disabled) {
+    background-color: #4a5660;
+    border-color: #546e7a;
+    transform: rotate(180deg);
+}
+
+.version-selector .refresh-button:disabled {
+    color: #757575;
+    cursor: not-allowed;
+}
+
+.version-selector select + .refresh-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
 }
 
 .version-details {

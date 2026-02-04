@@ -282,6 +282,12 @@ const BluetoothPage = (props: BluetoothProps) => {
     const [logsDropdownOpen, setLogsDropdownOpen] = useState<boolean>(false);
     const logsDropdownRef = useRef<HTMLDivElement>(null);
 
+    // Previous log files state
+    const [previousLogList, setPreviousLogList] = useState<string[]>([]);
+    const [selectedPreviousLog, setSelectedPreviousLog] = useState<string>("");
+    const [isLoadingPreviousLogs, setIsLoadingPreviousLogs] = useState<boolean>(false);
+    const [previousLogChunks, setPreviousLogChunks] = useState<string[]>([]);
+
     // Image state
     const [imageList, setImageList] = useState<string[]>([]);
     const [selectedImage, setSelectedImage] = useState<string>("");
@@ -473,6 +479,39 @@ const BluetoothPage = (props: BluetoothProps) => {
                                     setLogData(fullLogData);
                                     console.log('Log data reassembled and set:', fullLogData.substring(0, 100) + '...');
                                     return []; // Clear chunks
+                                });
+                                setIsLoadingLogs(false);
+                            }
+                            // Handle log list debug info
+                            else if (responseJson.type === 'log_list_debug') {
+                                console.warn(`Log list debug: ${responseJson.message}`);
+                            }
+                            // Handle log list chunk (previous log files)
+                            else if (responseJson.type === 'log_list_chunk') {
+                                console.log(`Received log list chunk ${responseJson.chunk + 1}/${responseJson.total}: ${responseJson.filename}`);
+                                setPreviousLogList(prev => [...prev, responseJson.filename]);
+                            }
+                            // Handle log list complete
+                            else if (responseJson.type === 'log_list_complete') {
+                                console.log(`Log list complete: ${responseJson.count} files`);
+                                setIsLoadingPreviousLogs(false);
+                            }
+                            // Handle previous log file chunk
+                            else if (responseJson.type === 'log_file_chunk') {
+                                console.log(`Received log file chunk ${responseJson.chunk}`);
+                                setPreviousLogChunks(prevChunks => {
+                                    const newChunks = [...prevChunks, responseJson.data];
+                                    setLogData(newChunks.join('\n'));
+                                    return newChunks;
+                                });
+                            }
+                            // Handle previous log file complete
+                            else if (responseJson.type === 'log_file_complete') {
+                                console.log(`Log file transfer complete: ${responseJson.filename} (${responseJson.total_chunks} lines)`);
+                                setPreviousLogChunks(chunks => {
+                                    const fullLogData = chunks.join('\n');
+                                    setLogData(fullLogData);
+                                    return [];
                                 });
                                 setIsLoadingLogs(false);
                             }
@@ -770,6 +809,25 @@ const BluetoothPage = (props: BluetoothProps) => {
                                     return [];
                                 });
                                 setIsLoadingLogs(false);
+                            } else if (responseJson.type === 'log_list_debug') {
+                                console.warn(`Log list debug: ${responseJson.message}`);
+                            } else if (responseJson.type === 'log_list_chunk') {
+                                setPreviousLogList(prev => [...prev, responseJson.filename]);
+                            } else if (responseJson.type === 'log_list_complete') {
+                                setIsLoadingPreviousLogs(false);
+                            } else if (responseJson.type === 'log_file_chunk') {
+                                setPreviousLogChunks(prevChunks => {
+                                    const newChunks = [...prevChunks, responseJson.data];
+                                    setLogData(newChunks.join('\n'));
+                                    return newChunks;
+                                });
+                            } else if (responseJson.type === 'log_file_complete') {
+                                setPreviousLogChunks(chunks => {
+                                    const fullLogData = chunks.join('\n');
+                                    setLogData(fullLogData);
+                                    return [];
+                                });
+                                setIsLoadingLogs(false);
                             } else if (Array.isArray(responseJson)) {
                                 setLogData(responseText);
                                 setIsLoadingLogs(false);
@@ -977,6 +1035,62 @@ const BluetoothPage = (props: BluetoothProps) => {
         } catch (err) {
             console.error('Error sending request_logs:', err);
             setError(`Failed to request logs: ${err}`);
+            setIsLoadingLogs(false);
+        }
+    }, [connection.commandCharacteristic]);
+
+    // Request list of previous log files
+    const requestPreviousLogList = useCallback(async () => {
+        if (!connection.commandCharacteristic) {
+            console.log('No command characteristic available');
+            return;
+        }
+
+        setIsLoadingPreviousLogs(true);
+        setPreviousLogList([]);
+        setError(null);
+
+        try {
+            console.log('Sending list_logs command...');
+            const command = JSON.stringify({ command: "list_logs" });
+            const encoder = new TextEncoder();
+            await connection.commandCharacteristic.writeValue(encoder.encode(command));
+            console.log('Command sent, waiting for log list...');
+        } catch (err) {
+            console.error('Error sending list_logs:', err);
+            setError(`Failed to request log list: ${err}`);
+            setIsLoadingPreviousLogs(false);
+        }
+    }, [connection.commandCharacteristic]);
+
+    // Request a specific previous log file
+    const requestPreviousLogFile = useCallback(async (filename: string, entries?: number | null) => {
+        if (!connection.commandCharacteristic) {
+            console.log('No command characteristic available');
+            return;
+        }
+
+        setIsLoadingLogs(true);
+        setError(null);
+        setPreviousLogChunks([]);
+        setLogData('');
+
+        try {
+            console.log(`Sending get_log_file command for: ${filename}`);
+            const commandObj: { command: string; filename: string; entries?: number } = {
+                command: "get_log_file",
+                filename: filename
+            };
+            if (entries !== null && entries !== undefined) {
+                commandObj.entries = entries;
+            }
+            const command = JSON.stringify(commandObj);
+            const encoder = new TextEncoder();
+            await connection.commandCharacteristic.writeValue(encoder.encode(command));
+            console.log(`Command sent: ${command}, waiting for log file...`);
+        } catch (err) {
+            console.error('Error sending get_log_file:', err);
+            setError(`Failed to request log file: ${err}`);
             setIsLoadingLogs(false);
         }
     }, [connection.commandCharacteristic]);
@@ -1285,9 +1399,41 @@ const BluetoothPage = (props: BluetoothProps) => {
                                                 Entire log file
                                             </button>
                                         </li>
+                                        <li><hr className="dropdown-divider" /></li>
+                                        <li>
+                                            <button
+                                                className="dropdown-item"
+                                                onClick={() => { requestPreviousLogList(); setLogsDropdownOpen(false); }}
+                                                disabled={isLoadingPreviousLogs}
+                                            >
+                                                {isLoadingPreviousLogs ? 'Loading...' : 'Previous logs...'}
+                                            </button>
+                                        </li>
                                     </ul>
                                 )}
                             </div>
+                            {previousLogList.length > 0 && (
+                                <select
+                                    className="form-select"
+                                    style={{ marginLeft: '10px', width: 'auto', display: 'inline-block' }}
+                                    value={selectedPreviousLog}
+                                    onChange={(e) => {
+                                        const filename = e.target.value;
+                                        setSelectedPreviousLog(filename);
+                                        if (filename) {
+                                            requestPreviousLogFile(filename);
+                                        }
+                                    }}
+                                    disabled={isLoadingLogs}
+                                >
+                                    <option value="">-- Select previous log --</option>
+                                    {[...previousLogList].reverse().map((logFile) => (
+                                        <option key={logFile} value={logFile}>
+                                            {logFile}
+                                        </option>
+                                    ))}
+                                </select>
+                            )}
                             <button
                                 type="button"
                                 className="btn btn-success"

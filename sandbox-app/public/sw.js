@@ -1,6 +1,6 @@
 // BootBoots Web App Service Worker for OTA Updates
 // Cache version - update this when deploying new versions
-const CACHE_VERSION = '1.0.0';
+const CACHE_VERSION = '1.1.0';
 const CACHE_NAME = 'bootboots-v' + CACHE_VERSION;
 const urlsToCache = [
   '/',
@@ -62,13 +62,23 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
-  // Cache-first for static assets only
+  // Stale-while-revalidate for static assets
+  // Serves cached content immediately, then fetches fresh content in background
   event.respondWith(
-    caches.match(event.request)
-      .then((response) => {
-        // Return cached version or fetch from network
-        return response || fetch(event.request);
-      })
+    caches.open(CACHE_NAME).then((cache) => {
+      return cache.match(event.request).then((cachedResponse) => {
+        const fetchPromise = fetch(event.request).then((networkResponse) => {
+          // Update the cache with fresh content
+          if (networkResponse.ok) {
+            cache.put(event.request, networkResponse.clone());
+          }
+          return networkResponse;
+        }).catch(() => cachedResponse); // Fall back to cache if network fails
+
+        // Return cached response immediately, or wait for network
+        return cachedResponse || fetchPromise;
+      });
+    })
   );
 });
 
