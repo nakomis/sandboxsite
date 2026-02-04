@@ -115,6 +115,23 @@ export class CognitoStack extends cdk.Stack {
             resources: [firmwareBucketArn, `${firmwareBucketArn}/*`]
         }));
 
+        // Grant IoT permissions for MQTT tab device discovery
+        this.userRole.addToPolicy(new iam.PolicyStatement({
+            effect: iam.Effect.ALLOW,
+            actions: [
+                'iot:ListThings',
+                'iot:DescribeThing',
+            ],
+            resources: ['*'],
+        }));
+
+        // Grant execute-api permissions for BootBoots API (list-devices endpoint)
+        this.userRole.addToPolicy(new iam.PolicyStatement({
+            effect: iam.Effect.ALLOW,
+            actions: ['execute-api:Invoke'],
+            resources: [`arn:aws:execute-api:${this.region}:${this.account}:*/*/GET/devices`],
+        }));
+
         new cognito.CfnIdentityPoolRoleAttachment(this, 'SandboxIdentityPoolRoleAttachment', {
             identityPoolId: identityPool.ref,
             roles: {
