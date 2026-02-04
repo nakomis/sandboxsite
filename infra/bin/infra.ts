@@ -5,11 +5,13 @@ import { CertificateStack } from '../lib/certificate-stack';
 import { CognitoStack } from '../lib/cognito-stack';
 import { FirmwareBucketStack } from '../lib/firmware-bucket-stack';
 import { ApiStack } from '../lib/api-stack';
+import { WebSocketStack } from '../lib/websocket-stack';
 
 const londonEnv = { env: { account: process.env.CDK_DEFAULT_ACCOUNT, region: process.env.CDK_DEFAULT_REGION } };
 const nvirginiaEnv = { env: { account: process.env.CDK_DEFAULT_ACCOUNT, region: 'us-east-1' } };
 const domainName = `sandbox.nakomis.com`
 const apiDomain = `api.sandbox.nakomis.com`;
+const wsDomain = `ws.sandbox.nakomis.com`;
 const authDomain = `auth0.${domainName}`;
 
 const app = new cdk.App();
@@ -42,4 +44,11 @@ const apiStack = new ApiStack(app, 'SandboxApiStack', {
     apiDomainName: apiDomain,
     apiCertificate: certificateStack.apiCertificate,
     crossRegionReferences: true,
+});
+
+// WebSocket Stack for IoT device communication
+const webSocketStack = new WebSocketStack(app, 'SandboxWebSocketStack', {
+    ...londonEnv,
+    domainName: domainName,
+    wsDomainName: wsDomain,
 });

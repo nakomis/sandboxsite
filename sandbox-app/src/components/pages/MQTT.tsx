@@ -8,7 +8,7 @@ import { DeviceSelector, DeviceList } from '../device';
 import './Bluetooth.css'; // Reuse Bluetooth styles for consistency
 
 // WebSocket endpoint for MQTT command relay
-const WEBSOCKET_ENDPOINT = 'wss://k7vqcg4bq4.execute-api.eu-west-2.amazonaws.com/prod';
+const WEBSOCKET_ENDPOINT = 'wss://ws.sandbox.nakomis.com';
 
 type MQTTProps = PageProps & {
     creds: Credentials | null;
