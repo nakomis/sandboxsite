@@ -7,9 +7,8 @@ import { getMqttTransport, MqttTransport } from '../../services/deviceTransport/
 import { DeviceSelector, DeviceList } from '../device';
 import './Bluetooth.css'; // Reuse Bluetooth styles for consistency
 
-// WebSocket endpoint - will be set after CDK deployment
-// Format: wss://{api-id}.execute-api.eu-west-2.amazonaws.com/prod
-const WEBSOCKET_ENDPOINT = 'wss://REPLACE_WITH_API_ID.execute-api.eu-west-2.amazonaws.com/prod';
+// WebSocket endpoint for MQTT command relay
+const WEBSOCKET_ENDPOINT = 'wss://k7vqcg4bq4.execute-api.eu-west-2.amazonaws.com/prod';
 
 type MQTTProps = PageProps & {
     creds: Credentials | null;
@@ -326,20 +325,6 @@ const MQTTPage = (props: MQTTProps) => {
                                 </div>
                             )}
 
-                            {/* WebSocket Endpoint Note */}
-                            {connectionState === 'disconnected' && (
-                                <div style={{
-                                    marginTop: '20px',
-                                    padding: '15px',
-                                    backgroundColor: '#3d4450',
-                                    borderRadius: '6px',
-                                    fontSize: '13px',
-                                    color: '#ffc107'
-                                }}>
-                                    <strong>Note:</strong> WebSocket endpoint needs to be configured after deploying the BootBootsWebSocketStack.
-                                    Update WEBSOCKET_ENDPOINT in MQTT.tsx with the API Gateway WebSocket URL.
-                                </div>
-                            )}
                         </div>
                     </div>
                 )}
