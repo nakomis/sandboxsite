@@ -4,6 +4,7 @@ import { CloudfrontStack } from '../lib/cloudfront-stack';
 import { CertificateStack } from '../lib/certificate-stack';
 import { CognitoStack } from '../lib/cognito-stack';
 import { FirmwareBucketStack } from '../lib/firmware-bucket-stack';
+import { ApiStack } from '../lib/api-stack';
 
 const londonEnv = { env: { account: process.env.CDK_DEFAULT_ACCOUNT, region: process.env.CDK_DEFAULT_REGION } };
 const nvirginiaEnv = { env: { account: process.env.CDK_DEFAULT_ACCOUNT, region: 'us-east-1' } };
@@ -33,3 +34,12 @@ const cognitoStack = new CognitoStack(app, 'SandboxCognitoStack', {
 });
 
 const firmwareBucketStack = new FirmwareBucketStack(app, 'SandboxFirmwareBucketStack', londonEnv);
+
+// API Stack for shared services (IoT device discovery, etc.)
+const apiStack = new ApiStack(app, 'SandboxApiStack', {
+    ...londonEnv,
+    domainName: domainName,
+    apiDomainName: apiDomain,
+    apiCertificate: certificateStack.apiCertificate,
+    crossRegionReferences: true,
+});

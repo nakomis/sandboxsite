@@ -125,7 +125,7 @@ export class CognitoStack extends cdk.Stack {
             resources: ['*'],
         }));
 
-        // Grant execute-api permissions for BootBoots API (list-devices endpoint)
+        // Grant execute-api permissions for Sandbox API (list-devices endpoint)
         this.userRole.addToPolicy(new iam.PolicyStatement({
             effect: iam.Effect.ALLOW,
             actions: ['execute-api:Invoke'],
