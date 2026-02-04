@@ -1,10 +1,28 @@
 import { Credentials } from '@aws-sdk/client-cognito-identity';
 import Page, { PageProps } from './Page';
 import { useState, useCallback, useEffect, useRef } from 'react';
-import { Device, DeviceResponse, ConnectionState } from '../../services/deviceTransport/types';
+import { LRUCache } from 'typescript-lru-cache';
+import {
+    Device,
+    DeviceResponse,
+    ConnectionState,
+    CameraSettings,
+    DEFAULT_CAMERA_SETTINGS,
+    BootBootsSystemStatus,
+    KappaWarmerStatus,
+    ImageAndResult,
+} from '../../services/deviceTransport/types';
 import { listDevicesSigned } from '../../services/mqttService';
 import { getMqttTransport, MqttTransport } from '../../services/deviceTransport/mqttTransport';
-import { DeviceSelector, DeviceList } from '../device';
+import {
+    DeviceSelector,
+    DeviceList,
+    LogViewer,
+    ImageGallery,
+    BootBootsControls,
+    KappaWarmerControls,
+    DeviceStatusPanel,
+} from '../device';
 import './Bluetooth.css'; // Reuse Bluetooth styles for consistency
 
 // WebSocket endpoint for MQTT command relay
@@ -25,25 +43,239 @@ const MQTTPage = (props: MQTTProps) => {
 
     // WebSocket connection state
     const [connectionState, setConnectionState] = useState<ConnectionState>('disconnected');
-    const [lastResponse, setLastResponse] = useState<DeviceResponse | null>(null);
     const [responseLog, setResponseLog] = useState<string[]>([]);
     const transportRef = useRef<MqttTransport | null>(null);
 
-    // Initialize transport
+    // Log state
+    const [logData, setLogData] = useState<string>('');
+    const [logChunks, setLogChunks] = useState<string[]>([]);
+    const [isLoadingLogs, setIsLoadingLogs] = useState<boolean>(false);
+
+    // Image state
+    const [imageList, setImageList] = useState<string[]>([]);
+    const [selectedImage, setSelectedImage] = useState<string>('');
+    const [isLoadingImages, setIsLoadingImages] = useState<boolean>(false);
+    const [isLoadingImage, setIsLoadingImage] = useState<boolean>(false);
+    const [currentImage, setCurrentImage] = useState<string | null>(null);
+    const [currentMetadata, setCurrentMetadata] = useState<string | null>(null);
+    const [imageChunks, setImageChunks] = useState<string[]>([]);
+    const [imageProgress, setImageProgress] = useState<{ current: number; total: number } | null>(null);
+    const [imageListChunks, setImageListChunks] = useState<string[]>([]);
+
+    // LRU Cache for images and metadata
+    const imageCacheRef = useRef<LRUCache<string, ImageAndResult>>(
+        new LRUCache<string, ImageAndResult>({ maxSize: 20 })
+    );
+
+    // Pending image data for caching
+    const pendingImageDataRef = useRef<{ filename: string; imageData: string } | null>(null);
+    const pendingNewPhotoRef = useRef<string | null>(null);
+
+    // Photo capture state
+    const [isTakingPhoto, setIsTakingPhoto] = useState<boolean>(false);
+
+    // Settings state
+    const [trainingMode, setTrainingMode] = useState<boolean>(false);
+    const [isUpdatingSetting, setIsUpdatingSetting] = useState<boolean>(false);
+    const [settingsExpanded, setSettingsExpanded] = useState<boolean>(false);
+    const [cameraSettings, setCameraSettings] = useState<CameraSettings>(DEFAULT_CAMERA_SETTINGS);
+    const [cameraSettingsExpanded, setCameraSettingsExpanded] = useState<boolean>(false);
+
+    // System status state
+    const [systemStatus, setSystemStatus] = useState<BootBootsSystemStatus | null>(null);
+    const [kappaStatus, setKappaStatus] = useState<KappaWarmerStatus | null>(null);
+    const [kappaExpanded, setKappaExpanded] = useState<boolean>(true);
+    const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+
+    // Reboot state
+    const [isRebooting, setIsRebooting] = useState<boolean>(false);
+
+    // Handle device responses
+    const handleResponse = useCallback((response: DeviceResponse) => {
+        console.log('Received response:', response);
+
+        // Add to response log
+        setResponseLog(prev => [
+            `[${new Date().toLocaleTimeString()}] ${response.type}: ${JSON.stringify(response).substring(0, 100)}...`,
+            ...prev.slice(0, 49)
+        ]);
+
+        // Handle different response types
+        switch (response.type) {
+            case 'pong':
+                console.log('Pong received');
+                break;
+
+            case 'log_chunk':
+                console.log(`Received log chunk ${response.chunk}/${response.total}`);
+                setLogChunks(prevChunks => {
+                    const newChunks = [...prevChunks, response.data as string];
+                    setLogData(newChunks.join('\n'));
+                    return newChunks;
+                });
+                break;
+
+            case 'logs_complete':
+                console.log(`Log transfer complete: ${response.total_chunks} chunks`);
+                setLogChunks(chunks => {
+                    setLogData(chunks.join('\n'));
+                    return [];
+                });
+                setIsLoadingLogs(false);
+                break;
+
+            case 'image_list':
+                console.log('Image list received:', response.images);
+                setImageList((response.images as string[]) || []);
+                setIsLoadingImages(false);
+                break;
+
+            case 'image_list_chunk':
+                setImageListChunks(prev => [...prev, response.filename as string]);
+                break;
+
+            case 'image_list_complete':
+                console.log(`Image list complete: ${response.count} images`);
+                setImageListChunks(chunks => {
+                    setImageList(chunks);
+                    setIsLoadingImages(false);
+                    // Check for pending new photo
+                    const pendingFilename = pendingNewPhotoRef.current;
+                    if (pendingFilename && chunks.includes(pendingFilename)) {
+                        console.log(`Auto-selecting new photo: ${pendingFilename}`);
+                        setSelectedImage(pendingFilename);
+                        pendingNewPhotoRef.current = null;
+                        // Request the new image
+                        handleGetImage(pendingFilename);
+                    }
+                    return [];
+                });
+                break;
+
+            case 'image_start':
+                console.log(`Image transfer starting: ${response.filename}`);
+                setImageChunks([]);
+                setImageProgress({ current: 0, total: 0 });
+                break;
+
+            case 'image_chunk':
+                setImageChunks(prev => [...prev, response.data as string]);
+                setImageProgress({
+                    current: (response.chunk as number) + 1,
+                    total: response.total as number
+                });
+                break;
+
+            case 'image_complete':
+                console.log(`Image transfer complete: ${response.chunks} chunks`);
+                const filename = response.filename as string;
+                setImageChunks(chunks => {
+                    const base64Data = chunks.join('');
+                    const imageDataUrl = `data:image/jpeg;base64,${base64Data}`;
+                    setCurrentImage(imageDataUrl);
+                    setImageProgress(null);
+                    pendingImageDataRef.current = { filename, imageData: imageDataUrl };
+                    return [];
+                });
+                // Request metadata
+                if (transportRef.current && connectionState === 'connected') {
+                    transportRef.current.sendCommand({
+                        command: 'get_image_metadata',
+                        filename
+                    });
+                }
+                break;
+
+            case 'metadata_result':
+                console.log(`Metadata result for: ${response.filename}`);
+                const metadata = response.found ? (response.content as string) : null;
+                setCurrentMetadata(metadata);
+                setIsLoadingImage(false);
+                // Cache the image with metadata
+                if (pendingImageDataRef.current && pendingImageDataRef.current.filename === response.filename) {
+                    imageCacheRef.current.set(response.filename as string, {
+                        imageData: pendingImageDataRef.current.imageData,
+                        metadata
+                    });
+                    pendingImageDataRef.current = null;
+                }
+                break;
+
+            case 'error':
+                console.error('Error from device:', response.message);
+                setError(response.message as string);
+                setIsLoadingImage(false);
+                setIsLoadingImages(false);
+                setIsLoadingLogs(false);
+                setIsTakingPhoto(false);
+                break;
+
+            case 'photo_started':
+                console.log('Photo capture started');
+                setIsTakingPhoto(true);
+                break;
+
+            case 'photo_complete':
+                console.log('Photo capture complete:', response.filename);
+                setIsTakingPhoto(false);
+                if (response.filename) {
+                    pendingNewPhotoRef.current = response.filename as string;
+                    handleListImages();
+                }
+                break;
+
+            case 'settings':
+                console.log('Settings received:', response);
+                setTrainingMode((response.training_mode as boolean) || false);
+                if (response.camera) {
+                    setCameraSettings(prev => ({ ...prev, ...(response.camera as Partial<CameraSettings>) }));
+                }
+                break;
+
+            case 'setting_updated':
+                console.log('Setting updated:', response);
+                if (response.setting === 'training_mode') {
+                    setTrainingMode(response.value as boolean);
+                } else if (typeof response.setting === 'string' && response.setting.startsWith('camera_')) {
+                    const camKey = response.setting.substring(7);
+                    setCameraSettings(prev => ({ ...prev, [camKey]: response.value }));
+                }
+                setIsUpdatingSetting(false);
+                break;
+
+            case 'reboot_ack':
+                console.log('Device is rebooting...');
+                setIsRebooting(false);
+                break;
+
+            case 'status':
+                if ((response.device as string) === 'Kappa-Warmer') {
+                    console.log('Kappa-Warmer status received:', response);
+                    setKappaStatus(response as unknown as KappaWarmerStatus);
+                } else {
+                    console.log('BootBoots status received:', response);
+                    setSystemStatus(response as unknown as BootBootsSystemStatus);
+                }
+                setLastUpdate(new Date());
+                break;
+        }
+    }, [connectionState]);
+
+    // Initialize transport and set up handlers
     useEffect(() => {
         transportRef.current = getMqttTransport(WEBSOCKET_ENDPOINT);
 
         const handleConnectionStateChange = (state: ConnectionState) => {
             setConnectionState(state);
-        };
-
-        const handleResponse = (response: DeviceResponse) => {
-            console.log('Received response:', response);
-            setLastResponse(response);
-            setResponseLog(prev => [
-                `[${new Date().toLocaleTimeString()}] ${JSON.stringify(response)}`,
-                ...prev.slice(0, 49) // Keep last 50 entries
-            ]);
+            if (state === 'disconnected') {
+                // Clear device-specific state on disconnect
+                setSystemStatus(null);
+                setKappaStatus(null);
+                setLogData('');
+                setImageList([]);
+                setCurrentImage(null);
+                setCurrentMetadata(null);
+            }
         };
 
         transportRef.current.onConnectionStateChange(handleConnectionStateChange);
@@ -55,7 +287,7 @@ const MQTTPage = (props: MQTTProps) => {
                 transportRef.current.offResponse(handleResponse);
             }
         };
-    }, []);
+    }, [handleResponse]);
 
     // Load devices on mount and when credentials change
     const loadDevices = useCallback(async () => {
@@ -87,11 +319,26 @@ const MQTTPage = (props: MQTTProps) => {
     }, [tabId, index, creds, devices.length, isLoadingDevices, loadDevices]);
 
     const handleDeviceSelect = useCallback((device: Device | null) => {
+        // Disconnect from previous device if connected
+        if (connectionState !== 'disconnected' && transportRef.current) {
+            transportRef.current.disconnect();
+        }
+
         setSelectedDevice(device);
+        // Reset device-specific state
+        setSystemStatus(null);
+        setKappaStatus(null);
+        setLogData('');
+        setImageList([]);
+        setCurrentImage(null);
+        setCurrentMetadata(null);
+        setTrainingMode(false);
+        setCameraSettings(DEFAULT_CAMERA_SETTINGS);
+
         if (device) {
             console.log('Selected device:', device);
         }
-    }, []);
+    }, [connectionState]);
 
     // Connect to WebSocket
     const handleConnect = useCallback(async () => {
@@ -100,6 +347,19 @@ const MQTTPage = (props: MQTTProps) => {
         setError(null);
         try {
             await transportRef.current.connect(selectedDevice);
+            // Request initial data after connection
+            setTimeout(() => {
+                if (transportRef.current && transportRef.current.getConnectionState() === 'connected') {
+                    // Request settings
+                    transportRef.current.sendCommand({ command: 'get_settings' });
+                    // Request status
+                    transportRef.current.sendCommand({ command: 'get_status' });
+                    // Request image list if device supports photos
+                    if (selectedDevice.capabilities.includes('photos')) {
+                        handleListImages();
+                    }
+                }
+            }, 500);
         } catch (err) {
             console.error('Connection error:', err);
             setError(`Failed to connect: ${err instanceof Error ? err.message : 'Unknown error'}`);
@@ -127,6 +387,199 @@ const MQTTPage = (props: MQTTProps) => {
         }
     }, [connectionState]);
 
+    // Request logs
+    const handleRequestLogs = useCallback(async () => {
+        if (!transportRef.current || connectionState !== 'connected') return;
+
+        setIsLoadingLogs(true);
+        setLogChunks([]);
+        setLogData('');
+        setError(null);
+
+        try {
+            await transportRef.current.sendCommand({ command: 'request_logs' });
+            console.log('Logs requested');
+        } catch (err) {
+            console.error('Request logs error:', err);
+            setError(`Failed to request logs: ${err instanceof Error ? err.message : 'Unknown error'}`);
+            setIsLoadingLogs(false);
+        }
+    }, [connectionState]);
+
+    // List images
+    const handleListImages = useCallback(async () => {
+        if (!transportRef.current || connectionState !== 'connected') return;
+
+        setIsLoadingImages(true);
+        setImageListChunks([]);
+        setError(null);
+
+        try {
+            await transportRef.current.sendCommand({ command: 'list_images' });
+            console.log('Image list requested');
+        } catch (err) {
+            console.error('List images error:', err);
+            setError(`Failed to list images: ${err instanceof Error ? err.message : 'Unknown error'}`);
+            setIsLoadingImages(false);
+        }
+    }, [connectionState]);
+
+    // Get specific image
+    const handleGetImage = useCallback(async (filename: string) => {
+        if (!transportRef.current || connectionState !== 'connected') return;
+
+        // Check cache first
+        const cached = imageCacheRef.current.get(filename);
+        if (cached) {
+            console.log(`Using cached image: ${filename}`);
+            setCurrentImage(cached.imageData);
+            setCurrentMetadata(cached.metadata);
+            setIsLoadingImage(false);
+            return;
+        }
+
+        setIsLoadingImage(true);
+        setCurrentImage(null);
+        setCurrentMetadata(null);
+        setImageChunks([]);
+        setError(null);
+
+        try {
+            await transportRef.current.sendCommand({ command: 'get_image', filename });
+            console.log('Image requested:', filename);
+        } catch (err) {
+            console.error('Get image error:', err);
+            setError(`Failed to get image: ${err instanceof Error ? err.message : 'Unknown error'}`);
+            setIsLoadingImage(false);
+        }
+    }, [connectionState]);
+
+    // Handle image selection
+    const handleImageSelect = useCallback((event: React.ChangeEvent<HTMLSelectElement>) => {
+        const filename = event.target.value;
+        setSelectedImage(filename);
+        if (filename) {
+            handleGetImage(filename);
+        }
+    }, [handleGetImage]);
+
+    // Take photo
+    const handleTakePhoto = useCallback(async () => {
+        if (!transportRef.current || connectionState !== 'connected') return;
+
+        setIsTakingPhoto(true);
+        setError(null);
+
+        try {
+            await transportRef.current.sendCommand({ command: 'take_photo' });
+            console.log('Take photo command sent');
+        } catch (err) {
+            console.error('Take photo error:', err);
+            setError(`Failed to take photo: ${err instanceof Error ? err.message : 'Unknown error'}`);
+            setIsTakingPhoto(false);
+        }
+    }, [connectionState]);
+
+    // Toggle training mode
+    const handleToggleTrainingMode = useCallback(async () => {
+        if (!transportRef.current || connectionState !== 'connected') return;
+
+        setIsUpdatingSetting(true);
+        setError(null);
+
+        try {
+            await transportRef.current.sendCommand({
+                command: 'set_setting',
+                setting: 'training_mode',
+                value: !trainingMode
+            });
+            console.log('Training mode toggle sent');
+        } catch (err) {
+            console.error('Toggle training mode error:', err);
+            setError(`Failed to toggle training mode: ${err instanceof Error ? err.message : 'Unknown error'}`);
+            setIsUpdatingSetting(false);
+        }
+    }, [connectionState, trainingMode]);
+
+    // Change camera setting
+    const handleCameraSettingChange = useCallback(async (setting: string, value: number | boolean) => {
+        if (!transportRef.current || connectionState !== 'connected') return;
+
+        setIsUpdatingSetting(true);
+        setError(null);
+
+        try {
+            await transportRef.current.sendCommand({
+                command: 'set_setting',
+                setting: `camera_${setting}`,
+                value
+            });
+            console.log(`Camera setting ${setting} change sent:`, value);
+        } catch (err) {
+            console.error('Camera setting change error:', err);
+            setError(`Failed to change setting: ${err instanceof Error ? err.message : 'Unknown error'}`);
+            setIsUpdatingSetting(false);
+        }
+    }, [connectionState]);
+
+    // Reboot device
+    const handleReboot = useCallback(async () => {
+        if (!transportRef.current || connectionState !== 'connected') return;
+
+        if (!window.confirm('Are you sure you want to reboot the device?')) {
+            return;
+        }
+
+        setIsRebooting(true);
+        setError(null);
+
+        try {
+            await transportRef.current.sendCommand({ command: 'reboot' });
+            console.log('Reboot command sent');
+        } catch (err) {
+            console.error('Reboot error:', err);
+            setError(`Failed to reboot: ${err instanceof Error ? err.message : 'Unknown error'}`);
+            setIsRebooting(false);
+        }
+    }, [connectionState]);
+
+    // Kappa-Warmer specific commands
+    const handleSetAuto = useCallback(async (enabled: boolean) => {
+        if (!transportRef.current || connectionState !== 'connected') return;
+
+        try {
+            await transportRef.current.sendCommand({ command: 'set_auto', enabled });
+            console.log('Set auto mode:', enabled);
+        } catch (err) {
+            console.error('Set auto error:', err);
+            setError(`Failed to set auto mode: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        }
+    }, [connectionState]);
+
+    const handleSetHeater = useCallback(async (on: boolean) => {
+        if (!transportRef.current || connectionState !== 'connected') return;
+
+        try {
+            await transportRef.current.sendCommand({ command: 'set_heater', on });
+            console.log('Set heater:', on);
+        } catch (err) {
+            console.error('Set heater error:', err);
+            setError(`Failed to set heater: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        }
+    }, [connectionState]);
+
+    const handleRequestStatus = useCallback(async () => {
+        if (!transportRef.current || connectionState !== 'connected') return;
+
+        try {
+            await transportRef.current.sendCommand({ command: 'get_status' });
+            console.log('Status requested');
+        } catch (err) {
+            console.error('Request status error:', err);
+            setError(`Failed to request status: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        }
+    }, [connectionState]);
+
     // Get connection status color
     const getConnectionColor = () => {
         switch (connectionState) {
@@ -147,6 +600,11 @@ const MQTTPage = (props: MQTTProps) => {
         }
     };
 
+    const isConnected = connectionState === 'connected';
+    const deviceType = selectedDevice?.deviceType || 'unknown';
+    const hasPhotos = selectedDevice?.capabilities.includes('photos') ?? false;
+    const hasLogs = selectedDevice?.capabilities.includes('logs') ?? false;
+
     return (
         <Page tabId={tabId} index={index}>
             <div className="page">
@@ -158,6 +616,20 @@ const MQTTPage = (props: MQTTProps) => {
                 {error && (
                     <div className="alert alert-danger" style={{ marginTop: '20px' }}>
                         <strong>Error:</strong> {error}
+                        <button
+                            type="button"
+                            onClick={() => setError(null)}
+                            style={{
+                                float: 'right',
+                                background: 'none',
+                                border: 'none',
+                                color: 'inherit',
+                                cursor: 'pointer',
+                                fontSize: '16px'
+                            }}
+                        >
+                            ×
+                        </button>
                     </div>
                 )}
 
@@ -244,7 +716,8 @@ const MQTTPage = (props: MQTTProps) => {
                             <div style={{
                                 display: 'flex',
                                 gap: '10px',
-                                marginBottom: '20px'
+                                marginBottom: '20px',
+                                flexWrap: 'wrap'
                             }}>
                                 {connectionState === 'disconnected' ? (
                                     <button
@@ -267,45 +740,114 @@ const MQTTPage = (props: MQTTProps) => {
                                             type="button"
                                             className="btn btn-success"
                                             onClick={handlePing}
-                                            disabled={connectionState !== 'connected'}
+                                            disabled={!isConnected}
                                         >
                                             Ping
+                                        </button>
+                                        {hasLogs && (
+                                            <button
+                                                type="button"
+                                                className="btn btn-info"
+                                                onClick={handleRequestLogs}
+                                                disabled={!isConnected || isLoadingLogs}
+                                            >
+                                                {isLoadingLogs ? 'Loading...' : 'Request Logs'}
+                                            </button>
+                                        )}
+                                        {hasPhotos && (
+                                            <>
+                                                <button
+                                                    type="button"
+                                                    className="btn btn-info"
+                                                    onClick={handleListImages}
+                                                    disabled={!isConnected || isLoadingImages}
+                                                >
+                                                    {isLoadingImages ? 'Loading...' : 'List Images'}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className="btn btn-warning"
+                                                    onClick={handleTakePhoto}
+                                                    disabled={!isConnected || isTakingPhoto}
+                                                >
+                                                    {isTakingPhoto ? 'Capturing...' : 'Take Photo'}
+                                                </button>
+                                            </>
+                                        )}
+                                        <button
+                                            type="button"
+                                            className="btn btn-danger"
+                                            onClick={handleReboot}
+                                            disabled={!isConnected || isRebooting}
+                                        >
+                                            {isRebooting ? 'Rebooting...' : 'Reboot'}
                                         </button>
                                     </>
                                 )}
                             </div>
 
-                            {/* Last Response */}
-                            {lastResponse && (
-                                <div style={{
-                                    marginBottom: '20px',
-                                    padding: '15px',
-                                    backgroundColor: '#1a1a2e',
-                                    borderRadius: '6px'
-                                }}>
-                                    <strong style={{ color: '#4CAF50' }}>Last Response:</strong>
-                                    <pre style={{
-                                        margin: '10px 0 0 0',
-                                        color: '#e0e0e0',
-                                        fontSize: '13px',
-                                        whiteSpace: 'pre-wrap',
-                                        wordBreak: 'break-word'
-                                    }}>
-                                        {JSON.stringify(lastResponse, null, 2)}
-                                    </pre>
-                                </div>
+                            {/* Device-specific controls */}
+                            {isConnected && deviceType === 'bootboots' && (
+                                <BootBootsControls
+                                    trainingMode={trainingMode}
+                                    onToggleTrainingMode={handleToggleTrainingMode}
+                                    isUpdatingSetting={isUpdatingSetting}
+                                    settingsExpanded={settingsExpanded}
+                                    onSettingsExpandToggle={() => setSettingsExpanded(!settingsExpanded)}
+                                    cameraSettings={cameraSettings}
+                                    cameraSettingsExpanded={cameraSettingsExpanded}
+                                    onCameraSettingsExpandToggle={() => setCameraSettingsExpanded(!cameraSettingsExpanded)}
+                                    onCameraSettingChange={handleCameraSettingChange}
+                                />
+                            )}
+
+                            {isConnected && deviceType === 'kappa-warmer' && (
+                                <KappaWarmerControls
+                                    status={kappaStatus}
+                                    expanded={kappaExpanded}
+                                    onExpandToggle={() => setKappaExpanded(!kappaExpanded)}
+                                    onSetAuto={handleSetAuto}
+                                    onSetHeater={handleSetHeater}
+                                    onRequestStatus={handleRequestStatus}
+                                />
+                            )}
+
+                            {/* Image Gallery */}
+                            {isConnected && hasPhotos && (
+                                <ImageGallery
+                                    imageList={imageList}
+                                    selectedImage={selectedImage}
+                                    onImageSelect={handleImageSelect}
+                                    isLoadingImage={isLoadingImage}
+                                    imageProgress={imageProgress}
+                                    currentImage={currentImage}
+                                    currentMetadata={currentMetadata}
+                                />
+                            )}
+
+                            {/* Log Viewer */}
+                            {isConnected && hasLogs && (
+                                <LogViewer logData={logData} />
+                            )}
+
+                            {/* System Status (BootBoots) */}
+                            {isConnected && deviceType === 'bootboots' && systemStatus && (
+                                <DeviceStatusPanel
+                                    status={systemStatus}
+                                    lastUpdate={lastUpdate}
+                                />
                             )}
 
                             {/* Response Log */}
                             {responseLog.length > 0 && (
-                                <div>
+                                <div style={{ marginTop: '20px' }}>
                                     <strong>Response Log:</strong>
                                     <div style={{
                                         marginTop: '10px',
                                         padding: '10px',
                                         backgroundColor: '#1a1a2e',
                                         borderRadius: '6px',
-                                        maxHeight: '200px',
+                                        maxHeight: '150px',
                                         overflow: 'auto'
                                     }}>
                                         {responseLog.map((log, i) => (
@@ -313,9 +855,9 @@ const MQTTPage = (props: MQTTProps) => {
                                                 key={i}
                                                 style={{
                                                     fontFamily: 'monospace',
-                                                    fontSize: '12px',
-                                                    color: '#aaa',
-                                                    marginBottom: '4px'
+                                                    fontSize: '11px',
+                                                    color: '#888',
+                                                    marginBottom: '2px'
                                                 }}
                                             >
                                                 {log}
@@ -324,7 +866,6 @@ const MQTTPage = (props: MQTTProps) => {
                                     </div>
                                 </div>
                             )}
-
                         </div>
                     </div>
                 )}
