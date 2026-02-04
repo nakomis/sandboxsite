@@ -11,7 +11,6 @@ import { Construct } from 'constructs';
 export interface ApiStackProps extends cdk.StackProps {
     domainName: string;
     apiDomainName: string;
-    apiCertificate: cm.ICertificate;
 }
 
 export class ApiStack extends cdk.Stack {
@@ -106,10 +105,16 @@ export class ApiStack extends cdk.Stack {
             domainName: props.domainName,
         });
 
+        // Create certificate in the same region as the API Gateway
+        const apiCertificate = new cm.Certificate(this, 'SandboxApiCertificate', {
+            domainName: props.apiDomainName,
+            validation: cm.CertificateValidation.fromDns(hostedZone),
+        });
+
         // Create custom domain for API Gateway
         const customDomain = new apigateway.DomainName(this, 'SandboxApiDomain', {
             domainName: props.apiDomainName,
-            certificate: props.apiCertificate,
+            certificate: apiCertificate,
             endpointType: apigateway.EndpointType.REGIONAL,
         });
 
