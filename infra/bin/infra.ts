@@ -42,8 +42,6 @@ const apiStack = new ApiStack(app, 'SandboxApiStack', {
     ...londonEnv,
     domainName: domainName,
     apiDomainName: apiDomain,
-    apiCertificate: certificateStack.apiCertificate,
-    crossRegionReferences: true,
 });
 
 // WebSocket Stack for IoT device communication
