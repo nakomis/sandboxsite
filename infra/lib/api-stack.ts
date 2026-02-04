@@ -100,6 +100,24 @@ export class ApiStack extends cdk.Stack {
             ],
         });
 
+        // Add Gateway Responses for CORS on errors (required for IAM auth)
+        // Using '*' to support both production and localhost origins
+        const corsResponseHeaders = {
+            'Access-Control-Allow-Origin': "'*'",
+            'Access-Control-Allow-Headers': "'Content-Type,Authorization,X-Amz-Date,X-Amz-Security-Token,X-Amz-Content-Sha256'",
+            'Access-Control-Allow-Methods': "'GET,POST,PUT,DELETE,OPTIONS'",
+        };
+
+        this.api.addGatewayResponse('Default4xx', {
+            type: apigateway.ResponseType.DEFAULT_4XX,
+            responseHeaders: corsResponseHeaders,
+        });
+
+        this.api.addGatewayResponse('Default5xx', {
+            type: apigateway.ResponseType.DEFAULT_5XX,
+            responseHeaders: corsResponseHeaders,
+        });
+
         // Look up the hosted zone
         const hostedZone = route53.HostedZone.fromLookup(this, 'SandboxHostedZone', {
             domainName: props.domainName,
