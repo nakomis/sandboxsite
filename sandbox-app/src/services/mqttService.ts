@@ -1,8 +1,8 @@
 import { Credentials } from '@aws-sdk/client-cognito-identity';
 import { Device, DeviceType, DeviceCapability } from './deviceTransport/types';
 
-// API endpoint for device discovery
-const BOOTBOOTS_API_BASE = 'https://api.bootboots.sandbox.nakomis.com';
+// API endpoint for device discovery (sandbox shared API)
+const SANDBOX_API_BASE = 'https://api.sandbox.nakomis.com';
 
 interface ListDevicesResponse {
     devices: {
@@ -67,7 +67,7 @@ export async function listDevicesSigned(
         throw new Error('AWS credentials required');
     }
 
-    let url = `${BOOTBOOTS_API_BASE}/devices`;
+    let url = `${SANDBOX_API_BASE}/devices`;
     if (project) {
         url += `?project=${encodeURIComponent(project)}`;
     }
