@@ -3,6 +3,23 @@ import { APIGatewayProxyEvent, APIGatewayProxyResult } from 'aws-lambda';
 
 const iotClient = new IoTClient({});
 
+const ALLOWED_ORIGINS = [
+    'https://sandbox.nakomis.com',
+    'http://localhost:3000',
+    'http://localhost:3001',
+];
+
+function getCorsHeaders(event: APIGatewayProxyEvent): Record<string, string> {
+    const origin = event.headers?.origin || event.headers?.Origin || '';
+    const allowedOrigin = ALLOWED_ORIGINS.includes(origin) ? origin : ALLOWED_ORIGINS[0];
+
+    return {
+        'Access-Control-Allow-Origin': allowedOrigin,
+        'Access-Control-Allow-Headers': 'Content-Type,Authorization,X-Amz-Date,X-Amz-Security-Token,X-Amz-Content-Sha256',
+        'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
+    };
+}
+
 interface DeviceInfo {
     thingName: string;
     thingArn?: string;
@@ -12,6 +29,8 @@ interface DeviceInfo {
 }
 
 export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayProxyResult> => {
+    const corsHeaders = getCorsHeaders(event);
+
     try {
         // Parse query parameters
         const project = event.queryStringParameters?.project;
@@ -63,6 +82,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
             statusCode: 200,
             headers: {
                 'Content-Type': 'application/json',
+                ...corsHeaders,
             },
             body: JSON.stringify({
                 devices,
@@ -75,6 +95,7 @@ export const handler = async (event: APIGatewayProxyEvent): Promise<APIGatewayPr
             statusCode: 500,
             headers: {
                 'Content-Type': 'application/json',
+                ...corsHeaders,
             },
             body: JSON.stringify({
                 error: 'Failed to list devices',
