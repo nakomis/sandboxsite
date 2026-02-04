@@ -8,12 +8,13 @@ import {
 } from './types';
 
 // WebSocket endpoint for MQTT bridge
-const WEBSOCKET_ENDPOINT = 'wss://YOUR_API_ID.execute-api.eu-west-2.amazonaws.com/prod';
+const WEBSOCKET_ENDPOINT = 'wss://ws.sandbox.nakomis.com';
 
 // Message types sent to WebSocket
 interface WebSocketMessage {
     action: 'sendCommand';
     deviceId: string;
+    project?: string;
     command: DeviceCommand;
 }
 
@@ -127,6 +128,7 @@ export class MqttTransport implements DeviceTransport {
         const message: WebSocketMessage = {
             action: 'sendCommand',
             deviceId: this.connectedDevice.id,
+            project: this.connectedDevice.project,
             command,
         };
 
