@@ -1,10 +1,15 @@
 import { Credentials } from '@aws-sdk/client-cognito-identity';
 import Page, { PageProps } from './Page';
-import { useState, useCallback, useEffect } from 'react';
-import { Device } from '../../services/deviceTransport/types';
+import { useState, useCallback, useEffect, useRef } from 'react';
+import { Device, DeviceResponse, ConnectionState } from '../../services/deviceTransport/types';
 import { listDevicesSigned } from '../../services/mqttService';
+import { getMqttTransport, MqttTransport } from '../../services/deviceTransport/mqttTransport';
 import { DeviceSelector, DeviceList } from '../device';
 import './Bluetooth.css'; // Reuse Bluetooth styles for consistency
+
+// WebSocket endpoint - will be set after CDK deployment
+// Format: wss://{api-id}.execute-api.eu-west-2.amazonaws.com/prod
+const WEBSOCKET_ENDPOINT = 'wss://REPLACE_WITH_API_ID.execute-api.eu-west-2.amazonaws.com/prod';
 
 type MQTTProps = PageProps & {
     creds: Credentials | null;
@@ -18,6 +23,40 @@ const MQTTPage = (props: MQTTProps) => {
     const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
     const [isLoadingDevices, setIsLoadingDevices] = useState<boolean>(false);
     const [error, setError] = useState<string | null>(null);
+
+    // WebSocket connection state
+    const [connectionState, setConnectionState] = useState<ConnectionState>('disconnected');
+    const [lastResponse, setLastResponse] = useState<DeviceResponse | null>(null);
+    const [responseLog, setResponseLog] = useState<string[]>([]);
+    const transportRef = useRef<MqttTransport | null>(null);
+
+    // Initialize transport
+    useEffect(() => {
+        transportRef.current = getMqttTransport(WEBSOCKET_ENDPOINT);
+
+        const handleConnectionStateChange = (state: ConnectionState) => {
+            setConnectionState(state);
+        };
+
+        const handleResponse = (response: DeviceResponse) => {
+            console.log('Received response:', response);
+            setLastResponse(response);
+            setResponseLog(prev => [
+                `[${new Date().toLocaleTimeString()}] ${JSON.stringify(response)}`,
+                ...prev.slice(0, 49) // Keep last 50 entries
+            ]);
+        };
+
+        transportRef.current.onConnectionStateChange(handleConnectionStateChange);
+        transportRef.current.onResponse(handleResponse);
+
+        return () => {
+            if (transportRef.current) {
+                transportRef.current.offConnectionStateChange(handleConnectionStateChange);
+                transportRef.current.offResponse(handleResponse);
+            }
+        };
+    }, []);
 
     // Load devices on mount and when credentials change
     const loadDevices = useCallback(async () => {
@@ -55,6 +94,60 @@ const MQTTPage = (props: MQTTProps) => {
         }
     }, []);
 
+    // Connect to WebSocket
+    const handleConnect = useCallback(async () => {
+        if (!selectedDevice || !transportRef.current) return;
+
+        setError(null);
+        try {
+            await transportRef.current.connect(selectedDevice);
+        } catch (err) {
+            console.error('Connection error:', err);
+            setError(`Failed to connect: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        }
+    }, [selectedDevice]);
+
+    // Disconnect from WebSocket
+    const handleDisconnect = useCallback(() => {
+        if (transportRef.current) {
+            transportRef.current.disconnect();
+        }
+    }, []);
+
+    // Send ping command
+    const handlePing = useCallback(async () => {
+        if (!transportRef.current || connectionState !== 'connected') return;
+
+        setError(null);
+        try {
+            await transportRef.current.sendCommand({ command: 'ping' });
+            console.log('Ping sent');
+        } catch (err) {
+            console.error('Ping error:', err);
+            setError(`Failed to send ping: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        }
+    }, [connectionState]);
+
+    // Get connection status color
+    const getConnectionColor = () => {
+        switch (connectionState) {
+            case 'connected': return '#4CAF50';
+            case 'connecting': return '#ff9800';
+            case 'reconnecting': return '#ff9800';
+            default: return '#888';
+        }
+    };
+
+    // Get connection status text
+    const getConnectionText = () => {
+        switch (connectionState) {
+            case 'connected': return 'Connected';
+            case 'connecting': return 'Connecting...';
+            case 'reconnecting': return 'Reconnecting...';
+            default: return 'Disconnected';
+        }
+    };
+
     return (
         <Page tabId={tabId} index={index}>
             <div className="page">
@@ -91,7 +184,7 @@ const MQTTPage = (props: MQTTProps) => {
                     </div>
                 )}
 
-                {/* Selected Device Info */}
+                {/* Selected Device Controls */}
                 {selectedDevice && (
                     <div style={{ marginTop: '20px' }}>
                         <div style={{
@@ -100,10 +193,33 @@ const MQTTPage = (props: MQTTProps) => {
                             padding: '20px',
                             backgroundColor: '#282c34'
                         }}>
-                            <h2 style={{ marginTop: 0 }}>
-                                {selectedDevice.name}
-                            </h2>
+                            <div style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                marginBottom: '20px'
+                            }}>
+                                <h2 style={{ margin: 0 }}>
+                                    {selectedDevice.name}
+                                </h2>
+                                <div style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '10px'
+                                }}>
+                                    <div style={{
+                                        width: '12px',
+                                        height: '12px',
+                                        borderRadius: '50%',
+                                        backgroundColor: getConnectionColor()
+                                    }} />
+                                    <span style={{ color: getConnectionColor() }}>
+                                        {getConnectionText()}
+                                    </span>
+                                </div>
+                            </div>
 
+                            {/* Device Info */}
                             <div style={{
                                 display: 'grid',
                                 gridTemplateColumns: '1fr 1fr',
@@ -120,58 +236,110 @@ const MQTTPage = (props: MQTTProps) => {
                                     <strong>Type:</strong> {selectedDevice.deviceType}
                                 </div>
                                 <div>
-                                    <strong>Status:</strong>{' '}
-                                    <span style={{
-                                        color: selectedDevice.connected ? '#4CAF50' : '#888'
-                                    }}>
-                                        {selectedDevice.connected ? 'Connected' : 'Offline'}
-                                    </span>
+                                    <strong>Capabilities:</strong>{' '}
+                                    {selectedDevice.capabilities.join(', ') || 'None'}
                                 </div>
                             </div>
 
-                            {selectedDevice.capabilities.length > 0 && (
-                                <div style={{ marginBottom: '20px' }}>
-                                    <strong>Capabilities:</strong>
-                                    <div style={{
-                                        marginTop: '8px',
-                                        display: 'flex',
-                                        gap: '8px',
-                                        flexWrap: 'wrap'
+                            {/* Connection Controls */}
+                            <div style={{
+                                display: 'flex',
+                                gap: '10px',
+                                marginBottom: '20px'
+                            }}>
+                                {connectionState === 'disconnected' ? (
+                                    <button
+                                        type="button"
+                                        className="btn btn-primary"
+                                        onClick={handleConnect}
+                                    >
+                                        Connect via MQTT
+                                    </button>
+                                ) : (
+                                    <>
+                                        <button
+                                            type="button"
+                                            className="btn btn-secondary"
+                                            onClick={handleDisconnect}
+                                        >
+                                            Disconnect
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="btn btn-success"
+                                            onClick={handlePing}
+                                            disabled={connectionState !== 'connected'}
+                                        >
+                                            Ping
+                                        </button>
+                                    </>
+                                )}
+                            </div>
+
+                            {/* Last Response */}
+                            {lastResponse && (
+                                <div style={{
+                                    marginBottom: '20px',
+                                    padding: '15px',
+                                    backgroundColor: '#1a1a2e',
+                                    borderRadius: '6px'
+                                }}>
+                                    <strong style={{ color: '#4CAF50' }}>Last Response:</strong>
+                                    <pre style={{
+                                        margin: '10px 0 0 0',
+                                        color: '#e0e0e0',
+                                        fontSize: '13px',
+                                        whiteSpace: 'pre-wrap',
+                                        wordBreak: 'break-word'
                                     }}>
-                                        {selectedDevice.capabilities.map((cap) => (
-                                            <span
-                                                key={cap}
+                                        {JSON.stringify(lastResponse, null, 2)}
+                                    </pre>
+                                </div>
+                            )}
+
+                            {/* Response Log */}
+                            {responseLog.length > 0 && (
+                                <div>
+                                    <strong>Response Log:</strong>
+                                    <div style={{
+                                        marginTop: '10px',
+                                        padding: '10px',
+                                        backgroundColor: '#1a1a2e',
+                                        borderRadius: '6px',
+                                        maxHeight: '200px',
+                                        overflow: 'auto'
+                                    }}>
+                                        {responseLog.map((log, i) => (
+                                            <div
+                                                key={i}
                                                 style={{
-                                                    padding: '4px 12px',
-                                                    backgroundColor: '#3d4450',
-                                                    borderRadius: '12px',
-                                                    fontSize: '13px',
-                                                    color: '#e0e0e0'
+                                                    fontFamily: 'monospace',
+                                                    fontSize: '12px',
+                                                    color: '#aaa',
+                                                    marginBottom: '4px'
                                                 }}
                                             >
-                                                {cap}
-                                            </span>
+                                                {log}
+                                            </div>
                                         ))}
                                     </div>
                                 </div>
                             )}
 
-                            {/* Placeholder for future MQTT controls */}
-                            <div style={{
-                                padding: '30px',
-                                backgroundColor: '#1a1a2e',
-                                borderRadius: '6px',
-                                textAlign: 'center',
-                                color: '#888'
-                            }}>
-                                <p style={{ marginBottom: '10px' }}>
-                                    MQTT controls will be implemented in Phase 2
-                                </p>
-                                <p style={{ fontSize: '13px' }}>
-                                    This will include WebSocket connection for real-time communication,
-                                    sending commands, and receiving device responses.
-                                </p>
-                            </div>
+                            {/* WebSocket Endpoint Note */}
+                            {connectionState === 'disconnected' && (
+                                <div style={{
+                                    marginTop: '20px',
+                                    padding: '15px',
+                                    backgroundColor: '#3d4450',
+                                    borderRadius: '6px',
+                                    fontSize: '13px',
+                                    color: '#ffc107'
+                                }}>
+                                    <strong>Note:</strong> WebSocket endpoint needs to be configured after deploying the BootBootsWebSocketStack.
+                                    Update WEBSOCKET_ENDPOINT in MQTT.tsx with the API Gateway WebSocket URL.
+                                </div>
+                            )}
                         </div>
                     </div>
                 )}
