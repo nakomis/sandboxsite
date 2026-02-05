@@ -72,6 +72,7 @@ const FRAME_SIZE_OPTIONS: { value: number; label: string }[] = [
 
 // BootBoots BLE Service UUIDs (lowercase as required by Web Bluetooth API)
 const BOOTBOOTS_SERVICE_UUID = "bb00b007-5af3-41c3-9689-2fc7175c1ba8";
+const OTA_SERVICE_UUID = "99db6ea6-27e4-434d-aafd-795cf95feb06";
 const STATUS_CHARACTERISTIC_UUID = "bb00b007-e90f-49fa-89c5-31e705b74d85";
 const LOGS_CHARACTERISTIC_UUID = "bb00b007-f1a2-49fa-89c5-31e705b74d86";
 const COMMAND_CHARACTERISTIC_UUID = "bb00b007-c0de-49fa-89c5-31e705b74d87";
@@ -418,7 +419,7 @@ const BluetoothPage = (props: BluetoothProps) => {
                 filters: [
                     { services: [BOOTBOOTS_SERVICE_UUID] }
                 ],
-                optionalServices: [BOOTBOOTS_SERVICE_UUID]
+                optionalServices: [BOOTBOOTS_SERVICE_UUID, OTA_SERVICE_UUID]
             });
 
             console.log('Found device:', device.name);
@@ -709,6 +710,13 @@ const BluetoothPage = (props: BluetoothProps) => {
                 commandCharacteristic: commandChar
             });
 
+            // Initialize OTA service for firmware updates
+            try {
+                await bluetoothService.initFromServer(server);
+            } catch (err) {
+                console.warn('OTA service not available on device:', err);
+            }
+
             setConnectionStatus("Connected");
 
             // // Request initial status after a delay to avoid GATT operation conflicts
@@ -737,6 +745,7 @@ const BluetoothPage = (props: BluetoothProps) => {
         if (connection.server) {
             connection.server.disconnect();
         }
+        bluetoothService.cleanup();
         setConnection({
             device: null,
             server: null,
@@ -983,6 +992,13 @@ const BluetoothPage = (props: BluetoothProps) => {
                 logsCharacteristic: logsChar,
                 commandCharacteristic: commandChar
             });
+
+            // Initialize OTA service for firmware updates
+            try {
+                await bluetoothService.initFromServer(server);
+            } catch (err) {
+                console.warn('OTA service not available on device:', err);
+            }
 
             setConnectionStatus("Connected");
             setIsReconnecting(false);
