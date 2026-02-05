@@ -64,12 +64,16 @@ export const handler: APIGatewayProxyHandler = async (event): Promise<APIGateway
             Key: {
                 connectionId: { S: connectionId! },
             },
-            UpdateExpression: 'SET deviceId = :deviceId, project = :project, ttl = :ttl, lastCommand = :lastCommand',
+            UpdateExpression: 'SET deviceId = :deviceId, #preservedword = :project, #ttlreservedword = :ttl, lastCommand = :lastCommand',
             ExpressionAttributeValues: {
                 ':deviceId': { S: message.deviceId },
                 ':project': { S: project },
                 ':ttl': { N: ttl.toString() },
                 ':lastCommand': { S: new Date().toISOString() },
+            },
+            ExpressionAttributeNames: {
+                '#preservedword': 'project',
+                '#ttlreservedword': 'ttl',
             },
         }));
 

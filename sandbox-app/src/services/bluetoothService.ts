@@ -108,6 +108,32 @@ export class BluetoothService {
     }
 
     /**
+     * Initialize OTA service from an existing GATT server connection.
+     * Used when Bluetooth.tsx manages the connection but needs OTA capabilities.
+     */
+    async initFromServer(server: BluetoothRemoteGATTServer): Promise<void> {
+        this.server = server;
+        this.device = server.device;
+
+        this.otaService = await server.getPrimaryService(this.OTA_SERVICE_UUID);
+        this.commandCharacteristic = await this.otaService.getCharacteristic(this.OTA_COMMAND_CHAR_UUID);
+        this.statusCharacteristic = await this.otaService.getCharacteristic(this.OTA_STATUS_CHAR_UUID);
+
+        await this.refreshVersion();
+
+        if (this.currentVersion === 'Unknown') {
+            try {
+                const status = await this.getStatus();
+                this.currentVersion = status.version || 'Unknown';
+            } catch {
+                console.warn('Could not retrieve version from device');
+            }
+        }
+
+        console.log('BluetoothService OTA initialized from existing server');
+    }
+
+    /**
      * Get current firmware version
      */
     getCurrentVersion(): string {
@@ -381,7 +407,7 @@ export class BluetoothService {
     /**
      * Clean up resources
      */
-    private cleanup(): void {
+    cleanup(): void {
         this.device = null;
         this.server = null;
         this.otaService = null;
