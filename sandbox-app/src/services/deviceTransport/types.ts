@@ -119,7 +119,10 @@ export type DeviceCommandType =
     | 'reboot'
     | 'get_status'
     | 'set_auto'
-    | 'set_heater';
+    | 'set_heater'
+    | 'ota_update'
+    | 'ota_cancel'
+    | 'get_version';
 
 // Generic device command
 export interface DeviceCommand {
@@ -150,7 +153,11 @@ export type DeviceResponseType =
     | 'settings'
     | 'setting_updated'
     | 'reboot_ack'
-    | 'status';
+    | 'status'
+    | 'ota_progress'
+    | 'ota_complete'
+    | 'ota_error'
+    | 'version';
 
 // Generic device response
 export interface DeviceResponse {

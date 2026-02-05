@@ -19,7 +19,6 @@ import Config from '../config/config';
 import HomePage from './pages/HomePage';
 import BluetoothPage from './pages/Bluetooth';
 import MQTTPage from './pages/MQTT';
-import FirmwareManagerPage from './pages/FirmwareManager';
 import BootBootsPage from './pages/BootBootsPage';
 
 const App: React.FC = () => {
@@ -156,7 +155,6 @@ const App: React.FC = () => {
                                             <Tab label="Home" />
                                             <Tab label="Bluetooth" />
                                             <Tab label="MQTT" />
-                                            <Tab label="Firmware Manager" />
                                             <Tab label="Cat Labeling" />
                                         </Tabs>
                                         <div style={{ flexGrow: 1, display: 'flex', justifyContent: 'flex-end' }}>
@@ -172,8 +170,7 @@ const App: React.FC = () => {
                                 <HomePage tabId={tabId} index={0} creds={creds}></HomePage>
                                 <BluetoothPage tabId={tabId} index={1} creds={creds}></BluetoothPage>
                                 <MQTTPage tabId={tabId} index={2} creds={creds}></MQTTPage>
-                                <FirmwareManagerPage tabId={tabId} index={3} creds={creds}></FirmwareManagerPage>
-                                <BootBootsPage tabId={tabId} index={4} creds={creds} username={auth.user?.profile?.preferred_username || null}></BootBootsPage>
+                                <BootBootsPage tabId={tabId} index={3} creds={creds} username={auth.user?.profile?.preferred_username || null}></BootBootsPage>
                             </Box>
                         </ThemeProvider>
                         {

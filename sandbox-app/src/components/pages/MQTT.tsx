@@ -22,6 +22,7 @@ import {
     BootBootsControls,
     KappaWarmerControls,
     DeviceStatusPanel,
+    FirmwareUpdatePanel,
 } from '../device';
 import './Bluetooth.css'; // Reuse Bluetooth styles for consistency
 
@@ -89,6 +90,13 @@ const MQTTPage = (props: MQTTProps) => {
 
     // Reboot state
     const [isRebooting, setIsRebooting] = useState<boolean>(false);
+
+    // Firmware update state
+    const [firmwareExpanded, setFirmwareExpanded] = useState<boolean>(false);
+    const [firmwareUpdateProgress, setFirmwareUpdateProgress] = useState<number | null>(null);
+    const [firmwareUpdateStatus, setFirmwareUpdateStatus] = useState<string | null>(null);
+    const [isFirmwareUpdating, setIsFirmwareUpdating] = useState<boolean>(false);
+    const [currentFirmwareVersion, setCurrentFirmwareVersion] = useState<string | null>(null);
 
     // Handle device responses
     const handleResponse = useCallback((response: DeviceResponse) => {
@@ -257,6 +265,36 @@ const MQTTPage = (props: MQTTProps) => {
                     setSystemStatus(response as unknown as BootBootsSystemStatus);
                 }
                 setLastUpdate(new Date());
+                break;
+
+            case 'version':
+                console.log('Firmware version received:', response.version);
+                setCurrentFirmwareVersion(response.version as string);
+                break;
+
+            case 'ota_progress':
+                console.log('OTA progress:', response.progress, response.status);
+                setFirmwareUpdateProgress(response.progress as number);
+                setFirmwareUpdateStatus(response.status as string);
+                break;
+
+            case 'ota_complete':
+                console.log('OTA complete:', response.version);
+                setFirmwareUpdateStatus('Update complete! Device will reboot...');
+                setFirmwareUpdateProgress(100);
+                setTimeout(() => {
+                    setIsFirmwareUpdating(false);
+                    setFirmwareUpdateProgress(null);
+                    setFirmwareUpdateStatus(null);
+                }, 3000);
+                break;
+
+            case 'ota_error':
+                console.error('OTA error:', response.message);
+                setError(`Firmware update failed: ${response.message}`);
+                setIsFirmwareUpdating(false);
+                setFirmwareUpdateProgress(null);
+                setFirmwareUpdateStatus(null);
                 break;
         }
     }, [connectionState]);
@@ -580,6 +618,50 @@ const MQTTPage = (props: MQTTProps) => {
         }
     }, [connectionState]);
 
+    // Firmware update handlers
+    const handleStartFirmwareUpdate = useCallback(async (url: string, version: string) => {
+        if (!transportRef.current || connectionState !== 'connected') {
+            setError('Not connected to device');
+            return;
+        }
+
+        try {
+            setIsFirmwareUpdating(true);
+            setFirmwareUpdateProgress(0);
+            setFirmwareUpdateStatus('Sending OTA command to device...');
+
+            // Send OTA update command via MQTT
+            // Note: URL chunking may be needed for long URLs - the device firmware needs to support this
+            await transportRef.current.sendCommand({
+                command: 'ota_update',
+                url,
+                version
+            });
+            console.log('OTA command sent via MQTT');
+            setFirmwareUpdateStatus('Update initiated - waiting for device...');
+
+        } catch (err) {
+            console.error('Error starting firmware update:', err);
+            setError(`Failed to start update: ${err instanceof Error ? err.message : 'Unknown error'}`);
+            setIsFirmwareUpdating(false);
+            setFirmwareUpdateProgress(null);
+            setFirmwareUpdateStatus(null);
+        }
+    }, [connectionState]);
+
+    const handleCancelFirmwareUpdate = useCallback(async () => {
+        if (!transportRef.current || connectionState !== 'connected') return;
+
+        try {
+            await transportRef.current.sendCommand({ command: 'ota_cancel' });
+            setIsFirmwareUpdating(false);
+            setFirmwareUpdateProgress(null);
+            setFirmwareUpdateStatus(null);
+        } catch (err) {
+            console.error('Failed to cancel update:', err);
+        }
+    }, [connectionState]);
+
     // Get connection status color
     const getConnectionColor = () => {
         switch (connectionState) {
@@ -809,6 +891,23 @@ const MQTTPage = (props: MQTTProps) => {
                                     onSetAuto={handleSetAuto}
                                     onSetHeater={handleSetHeater}
                                     onRequestStatus={handleRequestStatus}
+                                />
+                            )}
+
+                            {/* Firmware Update Panel (BootBoots only) */}
+                            {isConnected && deviceType === 'bootboots' && (
+                                <FirmwareUpdatePanel
+                                    deviceProject="bootboots"
+                                    currentVersion={currentFirmwareVersion}
+                                    expanded={firmwareExpanded}
+                                    onExpandToggle={() => setFirmwareExpanded(!firmwareExpanded)}
+                                    onStartUpdate={handleStartFirmwareUpdate}
+                                    onCancelUpdate={handleCancelFirmwareUpdate}
+                                    updateProgress={firmwareUpdateProgress}
+                                    updateStatus={firmwareUpdateStatus}
+                                    isUpdating={isFirmwareUpdating}
+                                    isConnected={isConnected}
+                                    creds={creds}
                                 />
                             )}
 

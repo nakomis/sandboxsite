@@ -53,10 +53,10 @@ const getCatadataRecords = async (creds: AWSCredentials): Promise<CatadataRecord
     });
 
     const command = new ScanCommand({
-        FilterExpression: "attribute_not_exists(#user) OR #user = :emptyString",
+        FilterExpression: "attribute_not_exists(#cat) OR #cat = :emptyString",
         TableName: "catadata",
         ExpressionAttributeNames: {
-            "#user": "user"
+            "#cat": "cat"
         },
         ExpressionAttributeValues: {
             ":emptyString": { S: "" }
@@ -130,15 +130,16 @@ const claimRecord = async (records: CatadataRecord[], creds: AWSCredentials, use
                 uuid: testRecord.uuid,
             },
             UpdateExpression: "SET #user = :user, #claimedAt = :claimedAt",
-            ConditionExpression: "attribute_not_exists(#user) OR #user = :emptyString",
+            ConditionExpression: "attribute_not_exists(#cat) OR #cat = :emptyString",
             ExpressionAttributeNames: {
                 "#user": "user",
                 "#claimedAt": "claimedAt",
+                "#cat": "cat",
             },
             ExpressionAttributeValues: {
                 ":user": testRecord.user,
                 ":claimedAt": testRecord.claimedAt,
-                ":emptyString": { S: "" }
+                ":emptyString": ""
             },
             ReturnValues: "ALL_NEW",
         });
