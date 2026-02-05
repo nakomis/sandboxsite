@@ -186,18 +186,26 @@ const BootBootsPage = (props: BootBootProps) => {
             })();
         }
     }, [props.creds]);
+    // Track if we're currently claiming to prevent duplicate claims
+    const [isClaiming, setIsClaiming] = useState(false);
+
     useEffect(() => {
-        if (catadataRecords.length > 0 && currentRecord === null) {
+        if (catadataRecords.length > 0 && currentRecord === null && !isClaiming && props.creds) {
+            setIsClaiming(true);
             (async () => {
-                const record = await claimRecord(catadataRecords, props.creds!, props.username || '');
-                if (!record) {
-                    console.error("No record claimed.");
-                    return;
+                try {
+                    const record = await claimRecord(catadataRecords, props.creds!, props.username || '');
+                    if (!record) {
+                        console.error("No record claimed.");
+                        return;
+                    }
+                    setCurrentRecord(record);
+                } finally {
+                    setIsClaiming(false);
                 }
-                setCurrentRecord(record);
             })();
         }
-    }, [catadataRecords]);
+    }, [catadataRecords, currentRecord, isClaiming, props.creds, props.username]);
     useEffect(() => {
         if (currentRecord) {
             setCatPicture(null); // Clear the previous picture first
@@ -243,21 +251,24 @@ const BootBootsPage = (props: BootBootProps) => {
         return false;
     };
 
-    function clickCat(cat: string) {
+    async function clickCat(cat: string) {
         if (!currentRecord) {
             console.error("No current record to update.");
             return;
         }
         currentRecord.cat = cat;
         currentRecord.reviewedAt = new Date().toISOString();
-        setCatadataRecord(props.creds!, currentRecord)
-        setCurrentRecord(null);
+
+        // Clear UI state first
         setCatPicture(null);
 
-        (async () => {
-            const records = await getCatadataRecords(props.creds!);
-            setCatadataRecords(records);
-        })();
+        // Wait for the record to be saved before refetching
+        await setCatadataRecord(props.creds!, currentRecord);
+
+        // Now refetch records and clear currentRecord
+        const records = await getCatadataRecords(props.creds!);
+        setCatadataRecords(records);
+        setCurrentRecord(null);
     }
 
     const { children, tabId, index } = props;

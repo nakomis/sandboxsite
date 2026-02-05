@@ -7,6 +7,8 @@ import "./Bluetooth.css";
 import Page, { PageProps } from "./Page";
 import { useState, useCallback, useEffect, useRef } from "react";
 import { LRUCache } from "typescript-lru-cache";
+import { FirmwareUpdatePanel } from '../device';
+import { bluetoothService } from '../../services/bluetoothService';
 
 // Cached image data with AI inference result
 interface ImageAndResult {
@@ -336,6 +338,13 @@ const BluetoothPage = (props: BluetoothProps) => {
     // Kappa-Warmer specific state
     const [kappaStatus, setKappaStatus] = useState<KappaWarmerStatus | null>(null);
     const [kappaExpanded, setKappaExpanded] = useState<boolean>(true);
+
+    // Firmware update state
+    const [firmwareExpanded, setFirmwareExpanded] = useState<boolean>(false);
+    const [firmwareUpdateProgress, setFirmwareUpdateProgress] = useState<number | null>(null);
+    const [firmwareUpdateStatus, setFirmwareUpdateStatus] = useState<string | null>(null);
+    const [isFirmwareUpdating, setIsFirmwareUpdating] = useState<boolean>(false);
+    const [currentFirmwareVersion, setCurrentFirmwareVersion] = useState<string | null>(null);
 
     // // Debug: Log when logData changes
     // useEffect(() => {
@@ -1284,6 +1293,80 @@ const BluetoothPage = (props: BluetoothProps) => {
         }
     }, [requestImage]);
 
+    // Firmware update handlers
+    const handleStartFirmwareUpdate = useCallback(async (url: string, version: string) => {
+        if (!connection.device) {
+            setError('No device connected');
+            return;
+        }
+
+        try {
+            setIsFirmwareUpdating(true);
+            setFirmwareUpdateProgress(0);
+            setFirmwareUpdateStatus('Initiating OTA update...');
+
+            // Start monitoring progress updates via BLE
+            await bluetoothService.startProgressMonitoring((response) => {
+                console.log('OTA Status Update:', response);
+                setFirmwareUpdateStatus(response.message);
+
+                if (response.progress !== undefined) {
+                    setFirmwareUpdateProgress(response.progress);
+                }
+
+                // Check if update completed or failed
+                if (response.status === 'error') {
+                    setError(`Update failed: ${response.message}`);
+                    setIsFirmwareUpdating(false);
+                    setFirmwareUpdateProgress(null);
+                    setFirmwareUpdateStatus(null);
+                } else if (response.progress === 100) {
+                    setFirmwareUpdateStatus('Update complete! Device will reboot...');
+                    setTimeout(() => {
+                        setIsFirmwareUpdating(false);
+                        setFirmwareUpdateProgress(null);
+                        setFirmwareUpdateStatus(null);
+                    }, 3000);
+                }
+            });
+
+            // Send OTA update command to ESP32 via bluetoothService
+            console.log('Sending OTA command with URL:', url);
+            await bluetoothService.sendOTACommand(url, version);
+            setFirmwareUpdateStatus('Update initiated - waiting for device...');
+
+        } catch (err) {
+            console.error('Error starting firmware update:', err);
+            setError(`Failed to start update: ${err}`);
+            setIsFirmwareUpdating(false);
+            setFirmwareUpdateProgress(null);
+            setFirmwareUpdateStatus(null);
+            await bluetoothService.stopProgressMonitoring();
+        }
+    }, [connection.device]);
+
+    const handleCancelFirmwareUpdate = useCallback(async () => {
+        try {
+            await bluetoothService.cancelUpdate();
+            await bluetoothService.stopProgressMonitoring();
+            setIsFirmwareUpdating(false);
+            setFirmwareUpdateProgress(null);
+            setFirmwareUpdateStatus(null);
+        } catch (err) {
+            console.error('Failed to cancel update:', err);
+        }
+    }, []);
+
+    // Get firmware version from device when connected
+    useEffect(() => {
+        if (connection.device && deviceType === 'bootboots') {
+            const version = bluetoothService.getCurrentVersion();
+            setCurrentFirmwareVersion(version !== 'Unknown' ? version : null);
+        } else {
+            setCurrentFirmwareVersion(null);
+        }
+    }, [connection.device, deviceType]);
+
     // Format uptime
     const formatUptime = (seconds: number): string => {
         const hours = Math.floor(seconds / 3600);
@@ -1916,6 +1999,23 @@ const BluetoothPage = (props: BluetoothProps) => {
                             </div>
                         )}
                     </div>
+                )}
+
+                {/* Firmware Update Panel (BootBoots only) */}
+                {connection.device && deviceType === 'bootboots' && (
+                    <FirmwareUpdatePanel
+                        deviceProject="bootboots"
+                        currentVersion={currentFirmwareVersion}
+                        expanded={firmwareExpanded}
+                        onExpandToggle={() => setFirmwareExpanded(!firmwareExpanded)}
+                        onStartUpdate={handleStartFirmwareUpdate}
+                        onCancelUpdate={handleCancelFirmwareUpdate}
+                        updateProgress={firmwareUpdateProgress}
+                        updateStatus={firmwareUpdateStatus}
+                        isUpdating={isFirmwareUpdating}
+                        isConnected={!!connection.device}
+                        creds={props.creds}
+                    />
                 )}
 
                 {/* Error Display */}
