@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { Credentials } from '@aws-sdk/client-cognito-identity';
 import Page, { PageProps } from './Page';
-import { CatcamEvent, getEvents } from '../../services/eventsService';
+import { CatcamEvent, ClaudeResult, getEvents } from '../../services/eventsService';
 
 const TRIGGER_THRESHOLD = 0.80;
 
@@ -202,6 +202,13 @@ const EventsPage: React.FC<EventsPageProps> = (props) => {
                                 <div style={{ fontSize: '0.85rem', color: '#ccc' }}>
                                     <div><strong>Time:</strong> {formatTimestamp(selectedEvent.timestamp)}</div>
                                     <div style={{ wordBreak: 'break-all' }}><strong>File:</strong> {selectedEvent.imageName}</div>
+                                    {selectedEvent.claudeResult && (
+                                        <div style={{ marginTop: 6 }} title={selectedEvent.claudeResult.reasoning}>
+                                            <strong>Claude:</strong>{' '}
+                                            {selectedEvent.claudeResult.cat}{' '}
+                                            <span style={{ color: '#aaa' }}>({selectedEvent.claudeResult.confidence} confidence)</span>
+                                        </div>
+                                    )}
                                 </div>
                                 <button
                                     className="btn btn-secondary btn-sm"

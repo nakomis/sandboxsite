@@ -77,6 +77,9 @@ const MQTTPage = (props: MQTTProps) => {
 
     // Settings state
     const [trainingMode, setTrainingMode] = useState<boolean>(false);
+    const [dryRun, setDryRun] = useState<boolean>(false);
+    const [triggerThresh, setTriggerThresh] = useState<number>(0.80);
+    const [claudeInfer, setClaudeInfer] = useState<boolean>(false);
     const [isUpdatingSetting, setIsUpdatingSetting] = useState<boolean>(false);
     const [settingsExpanded, setSettingsExpanded] = useState<boolean>(false);
     const [cameraSettings, setCameraSettings] = useState<CameraSettings>(DEFAULT_CAMERA_SETTINGS);
@@ -235,6 +238,9 @@ const MQTTPage = (props: MQTTProps) => {
             case 'settings':
                 console.log('Settings received:', response);
                 setTrainingMode((response.training_mode as boolean) || false);
+                setDryRun((response.dry_run as boolean) || false);
+                setTriggerThresh((response.trigger_threshold as number) ?? 0.80);
+                setClaudeInfer((response.claude_infer as boolean) || false);
                 if (response.camera) {
                     setCameraSettings(prev => ({ ...prev, ...(response.camera as Partial<CameraSettings>) }));
                 }
@@ -244,6 +250,12 @@ const MQTTPage = (props: MQTTProps) => {
                 console.log('Setting updated:', response);
                 if (response.setting === 'training_mode') {
                     setTrainingMode(response.value as boolean);
+                } else if (response.setting === 'dry_run') {
+                    setDryRun(response.value as boolean);
+                } else if (response.setting === 'trigger_threshold') {
+                    setTriggerThresh(response.value as number);
+                } else if (response.setting === 'claude_infer') {
+                    setClaudeInfer(response.value as boolean);
                 } else if (typeof response.setting === 'string' && response.setting.startsWith('camera_')) {
                     const camKey = response.setting.substring(7);
                     setCameraSettings(prev => ({ ...prev, [camKey]: response.value }));
@@ -538,6 +550,63 @@ const MQTTPage = (props: MQTTProps) => {
             setIsUpdatingSetting(false);
         }
     }, [connectionState, trainingMode]);
+
+    // Toggle dry run mode
+    const handleToggleDryRun = useCallback(async () => {
+        if (!transportRef.current || connectionState !== 'connected') return;
+
+        setIsUpdatingSetting(true);
+        setError(null);
+
+        try {
+            await transportRef.current.sendCommand({
+                command: 'set_dry_run',
+                enabled: !dryRun
+            });
+        } catch (err) {
+            console.error('Toggle dry run error:', err);
+            setError(`Failed to toggle dry run: ${err instanceof Error ? err.message : 'Unknown error'}`);
+            setIsUpdatingSetting(false);
+        }
+    }, [connectionState, dryRun]);
+
+    // Set trigger threshold
+    const handleSetTriggerThresh = useCallback(async (value: number) => {
+        if (!transportRef.current || connectionState !== 'connected') return;
+
+        setIsUpdatingSetting(true);
+        setError(null);
+
+        try {
+            await transportRef.current.sendCommand({
+                command: 'set_trigger_threshold',
+                value
+            });
+        } catch (err) {
+            console.error('Set trigger threshold error:', err);
+            setError(`Failed to set trigger threshold: ${err instanceof Error ? err.message : 'Unknown error'}`);
+            setIsUpdatingSetting(false);
+        }
+    }, [connectionState]);
+
+    // Toggle Claude vision inference
+    const handleToggleClaudeInfer = useCallback(async () => {
+        if (!transportRef.current || connectionState !== 'connected') return;
+
+        setIsUpdatingSetting(true);
+        setError(null);
+
+        try {
+            await transportRef.current.sendCommand({
+                command: 'set_claude_infer',
+                enabled: !claudeInfer
+            });
+        } catch (err) {
+            console.error('Toggle Claude infer error:', err);
+            setError(`Failed to toggle Claude inference: ${err instanceof Error ? err.message : 'Unknown error'}`);
+            setIsUpdatingSetting(false);
+        }
+    }, [connectionState, claudeInfer]);
 
     // Change camera setting
     const handleCameraSettingChange = useCallback(async (setting: string, value: number | boolean) => {
@@ -873,6 +942,12 @@ const MQTTPage = (props: MQTTProps) => {
                                 <BootBootsControls
                                     trainingMode={trainingMode}
                                     onToggleTrainingMode={handleToggleTrainingMode}
+                                    dryRun={dryRun}
+                                    onToggleDryRun={handleToggleDryRun}
+                                    triggerThresh={triggerThresh}
+                                    onSetTriggerThresh={handleSetTriggerThresh}
+                                    claudeInfer={claudeInfer}
+                                    onToggleClaudeInfer={handleToggleClaudeInfer}
                                     isUpdatingSetting={isUpdatingSetting}
                                     settingsExpanded={settingsExpanded}
                                     onSettingsExpandToggle={() => setSettingsExpanded(!settingsExpanded)}

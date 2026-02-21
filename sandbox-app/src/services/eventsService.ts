@@ -3,12 +3,19 @@ import { signedFetch } from "./mqttService";
 
 const EVENTS_API_URL = 'https://api.bootboots.sandbox.nakomis.com/events';
 
+export interface ClaudeResult {
+    cat: string;
+    confidence: string;
+    reasoning: string;
+}
+
 export interface CatcamEvent {
     id: string;
     timestamp: string;
     imageName: string;
     bootsConfidence: number;
     imageUrl: string | null;
+    claudeResult?: ClaudeResult;
 }
 
 export async function getEvents(
