@@ -54,6 +54,7 @@ self.addEventListener('fetch', (event) => {
   if (url.hostname.includes('amazonaws.com') ||
       url.hostname.includes('s3.') ||
       url.pathname.includes('manifest.json') ||
+      url.pathname.includes('nakomis-firmware') ||
       event.request.url.includes('firmware')) {
     event.respondWith(
       fetch(event.request)

@@ -48,9 +48,10 @@ export const handler: Handler<IoTRuleEvent> = async (event) => {
 
         // Create API Gateway Management client
         // The endpoint URL needs to be in the format: https://{api-id}.execute-api.{region}.amazonaws.com/{stage}
-        const apiClient = new ApiGatewayManagementApiClient({
-            endpoint: WEBSOCKET_ENDPOINT.replace('wss://', 'https://').replace('/prod', ''),
+        const apiClient: ApiGatewayManagementApiClient  = new ApiGatewayManagementApiClient({
+            endpoint: WEBSOCKET_ENDPOINT,
         });
+
 
         // Send response to all connected clients
         const sendPromises = connections.map(async (connection) => {
