@@ -49,10 +49,11 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
 
-  // Network-first for S3/API requests (firmware manifests, etc.)
+  // Network-first for S3/API requests (firmware manifests, API Gateway, etc.)
   // These should always fetch fresh data
   if (url.hostname.includes('amazonaws.com') ||
       url.hostname.includes('s3.') ||
+      url.hostname.includes('api.bootboots') ||
       url.pathname.includes('manifest.json') ||
       url.pathname.includes('nakomis-firmware') ||
       event.request.url.includes('firmware')) {

@@ -20,6 +20,7 @@ import HomePage from './pages/HomePage';
 import BluetoothPage from './pages/Bluetooth';
 import MQTTPage from './pages/MQTT';
 import BootBootsPage from './pages/BootBootsPage';
+import EventsPage from './pages/Events';
 
 const App: React.FC = () => {
     const auth = useAuth();
@@ -156,6 +157,7 @@ const App: React.FC = () => {
                                             <Tab label="Bluetooth" />
                                             <Tab label="MQTT" />
                                             <Tab label="Cat Labeling" />
+                                            <Tab label="Catches" />
                                         </Tabs>
                                         <div style={{ flexGrow: 1, display: 'flex', justifyContent: 'flex-end' }}>
                                             <button type="button" className="btn btn-primary" style={{ marginRight: 10, alignSelf: "anchor-center" }} onClick={() => {
@@ -171,6 +173,7 @@ const App: React.FC = () => {
                                 <BluetoothPage tabId={tabId} index={1} creds={creds}></BluetoothPage>
                                 <MQTTPage tabId={tabId} index={2} creds={creds}></MQTTPage>
                                 <BootBootsPage tabId={tabId} index={3} creds={creds} username={auth.user?.profile?.preferred_username || null}></BootBootsPage>
+                                <EventsPage tabId={tabId} index={4} creds={creds}></EventsPage>
                             </Box>
                         </ThemeProvider>
                         {
