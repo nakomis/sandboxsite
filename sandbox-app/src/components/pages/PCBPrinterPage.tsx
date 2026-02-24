@@ -41,8 +41,7 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
     const [fileContent, setFileContent] = useState<string | null>(null);
     const [fileExt, setFileExt] = useState<string>('.svg');
     const [options, setOptions] = useState<UIOptions>(DEFAULT_UI_OPTIONS);
-    const [fontData, setFontData] = useState<ArrayBuffer | undefined>(undefined);
-    const [fontName, setFontName] = useState<string | null>(null);
+
     const [stlOutputs, setStlOutputs] = useState<StlOutputs | null>(null);
     const [generating, setGenerating] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -74,17 +73,6 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
         reader.readAsText(file);
     }, []);
 
-    const handleFontChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        setFontName(file.name);
-        const reader = new FileReader();
-        reader.onload = (evt) => {
-            setFontData(evt.target?.result as ArrayBuffer ?? undefined);
-        };
-        reader.readAsArrayBuffer(file);
-    }, []);
-
     const handleOption = useCallback(<K extends keyof UIOptions>(key: K, value: UIOptions[K]) => {
         setOptions(prev => ({ ...prev, [key]: value }));
     }, []);
@@ -98,8 +86,14 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
             const fullOptions: PrinterOptions = {
                 ...DEFAULT_OPTIONS,
                 ...options,
-                fontData,
             };
+            // Load bundled monospace font when text relief is requested
+            if (fullOptions.textReliefMm > 0) {
+                try {
+                    const fontResp = await fetch(process.env.PUBLIC_URL + '/fonts/JetBrainsMono-Regular.woff');
+                    fullOptions.fontData = await fontResp.arrayBuffer();
+                } catch { /* text relief silently skipped if font fetch fails */ }
+            }
             let model;
             if (fileExt === '.fz') {
                 model = parseFritzingFz(fileContent);
@@ -116,7 +110,7 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
         } finally {
             setGenerating(false);
         }
-    }, [fileContent, fileExt, options, fontData]);
+    }, [fileContent, fileExt, options]);
 
     const downloadStl = useCallback((buf: ArrayBuffer, name: string) => {
         const blob = new Blob([buf], { type: 'model/stl' });
@@ -368,36 +362,6 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
                             style={inputStyle}
                         />
                     </div>
-                    {options.textReliefMm > 0 && (
-                        <div style={rowStyle}>
-                            <span style={labelStyle}>Font file (TTF/OTF)</span>
-                            <label style={{
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                gap: 8,
-                                cursor: 'pointer',
-                                padding: '4px 10px',
-                                background: '#2a2d35',
-                                border: '1px solid #444',
-                                borderRadius: 4,
-                                fontSize: 13,
-                                color: '#aaa',
-                            }}>
-                                <input
-                                    type="file"
-                                    accept=".ttf,.otf,.ttc"
-                                    style={{ display: 'none' }}
-                                    onChange={handleFontChange}
-                                />
-                                {fontName ?? 'Choose font…'}
-                            </label>
-                            {!fontData && (
-                                <span style={{ color: '#f9a435', fontSize: 12 }}>
-                                    Required for text relief
-                                </span>
-                            )}
-                        </div>
-                    )}
                     <div style={rowStyle}>
                         <span style={labelStyle}>Drill diameter (mm)</span>
                         <input
