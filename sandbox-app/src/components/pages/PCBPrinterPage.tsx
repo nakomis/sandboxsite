@@ -397,28 +397,62 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
                             </div>
                         </section>
 
-                        {/* Generate button */}
+                        {/* Generate + download row */}
                         <section style={{ marginBottom: 16 }}>
-                            <button
-                                onClick={generate}
-                                disabled={!fileContent || generating}
-                                style={{
-                                    padding: '10px 28px',
-                                    background: fileContent && !generating ? '#03A550' : '#2a2d35',
-                                    color: '#fff',
-                                    border: 'none',
-                                    borderRadius: 4,
-                                    fontSize: 16,
-                                    cursor: fileContent && !generating ? 'pointer' : 'not-allowed',
-                                }}
-                            >
-                                {generating ? 'Generating…' : 'Generate STLs'}
-                            </button>
-                            {generating && (
-                                <span style={{ marginLeft: 16, color: '#888', fontSize: 14 }}>
-                                    Running CSG — may take a few seconds…
-                                </span>
-                            )}
+                            <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                                <button
+                                    onClick={generate}
+                                    disabled={!fileContent || generating}
+                                    style={{
+                                        padding: '10px 28px',
+                                        background: fileContent && !generating ? '#03A550' : '#2a2d35',
+                                        color: '#fff',
+                                        border: 'none',
+                                        borderRadius: 4,
+                                        fontSize: 16,
+                                        cursor: fileContent && !generating ? 'pointer' : 'not-allowed',
+                                    }}
+                                >
+                                    {generating ? 'Generating…' : 'Generate STLs'}
+                                </button>
+                                {stlOutputs && (
+                                    <>
+                                        <button
+                                            onClick={() => downloadStl(stlOutputs.pcb, (fileName ?? 'pcb') + '-pcb.stl')}
+                                            style={{
+                                                padding: '10px 20px',
+                                                background: '#03A550',
+                                                color: '#fff',
+                                                border: 'none',
+                                                borderRadius: 4,
+                                                fontSize: 16,
+                                                cursor: 'pointer',
+                                            }}
+                                        >
+                                            Download PCB
+                                        </button>
+                                        <button
+                                            onClick={() => downloadStl(stlOutputs.press, (fileName ?? 'pcb') + '-press.stl')}
+                                            style={{
+                                                padding: '10px 20px',
+                                                background: '#2244aa',
+                                                color: '#fff',
+                                                border: 'none',
+                                                borderRadius: 4,
+                                                fontSize: 16,
+                                                cursor: 'pointer',
+                                            }}
+                                        >
+                                            Download Press
+                                        </button>
+                                    </>
+                                )}
+                                {generating && (
+                                    <span style={{ color: '#888', fontSize: 14 }}>
+                                        Running CSG — may take a few seconds…
+                                    </span>
+                                )}
+                            </div>
                         </section>
 
                         {/* Error */}
@@ -479,40 +513,6 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
                             </p>
                         </section>
 
-                        {/* Downloads — below preview */}
-                        {stlOutputs && (
-                            <section style={{ marginTop: 16 }}>
-                                <h3 style={{ color: '#ddd', marginBottom: 12 }}>Downloads</h3>
-                                <div style={{ display: 'flex', gap: 12 }}>
-                                    <button
-                                        onClick={() => downloadStl(stlOutputs.pcb, (fileName ?? 'pcb') + '-pcb.stl')}
-                                        style={{
-                                            padding: '8px 20px',
-                                            background: '#03A550',
-                                            color: '#fff',
-                                            border: 'none',
-                                            borderRadius: 4,
-                                            cursor: 'pointer',
-                                        }}
-                                    >
-                                        Download PCB STL
-                                    </button>
-                                    <button
-                                        onClick={() => downloadStl(stlOutputs.press, (fileName ?? 'pcb') + '-press.stl')}
-                                        style={{
-                                            padding: '8px 20px',
-                                            background: '#2244aa',
-                                            color: '#fff',
-                                            border: 'none',
-                                            borderRadius: 4,
-                                            cursor: 'pointer',
-                                        }}
-                                    >
-                                        Download Press STL
-                                    </button>
-                                </div>
-                            </section>
-                        )}
                     </div>
                 </div>
             </div>
