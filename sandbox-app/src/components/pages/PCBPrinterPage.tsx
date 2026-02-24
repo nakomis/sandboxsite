@@ -190,6 +190,15 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
 
         if (!stlOutputs) return;
 
+        // Resize renderer to actual container width now that the section is visible
+        const container = canvasRef.current;
+        if (container) {
+            const w = container.clientWidth || 720;
+            ctx.renderer.setSize(w, 350);
+            ctx.camera.aspect = w / 350;
+            ctx.camera.updateProjectionMatrix();
+        }
+
         const buf = viewerMode === 'pcb' ? stlOutputs.pcb : stlOutputs.press;
         const loader = new STLLoader();
         const geometry = loader.parse(buf);
@@ -480,53 +489,51 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
                     </section>
                 )}
 
-                {/* STL viewer */}
-                {stlOutputs && (
-                    <section>
-                        <h3 style={{ color: '#ddd', marginBottom: 8 }}>Preview</h3>
-                        <div style={{ display: 'flex', gap: 12, marginBottom: 8 }}>
-                            <button
-                                onClick={() => setViewerMode('pcb')}
-                                style={{
-                                    padding: '4px 14px',
-                                    background: viewerMode === 'pcb' ? '#03A550' : '#2a2d35',
-                                    color: '#fff',
-                                    border: '1px solid #444',
-                                    borderRadius: 4,
-                                    cursor: 'pointer',
-                                }}
-                            >
-                                PCB
-                            </button>
-                            <button
-                                onClick={() => setViewerMode('press')}
-                                style={{
-                                    padding: '4px 14px',
-                                    background: viewerMode === 'press' ? '#2244aa' : '#2a2d35',
-                                    color: '#fff',
-                                    border: '1px solid #444',
-                                    borderRadius: 4,
-                                    cursor: 'pointer',
-                                }}
-                            >
-                                Press
-                            </button>
-                        </div>
-                        <div
-                            ref={canvasRef}
+                {/* STL viewer — section always in DOM so Three.js can init on mount */}
+                <section style={{ display: stlOutputs ? undefined : 'none' }}>
+                    <h3 style={{ color: '#ddd', marginBottom: 8 }}>Preview</h3>
+                    <div style={{ display: 'flex', gap: 12, marginBottom: 8 }}>
+                        <button
+                            onClick={() => setViewerMode('pcb')}
                             style={{
-                                width: '100%',
-                                height: 350,
+                                padding: '4px 14px',
+                                background: viewerMode === 'pcb' ? '#03A550' : '#2a2d35',
+                                color: '#fff',
+                                border: '1px solid #444',
                                 borderRadius: 4,
-                                overflow: 'hidden',
-                                border: '1px solid #333',
+                                cursor: 'pointer',
                             }}
-                        />
-                        <p style={{ color: '#666', fontSize: 12, marginTop: 4 }}>
-                            Drag to rotate · scroll to zoom
-                        </p>
-                    </section>
-                )}
+                        >
+                            PCB
+                        </button>
+                        <button
+                            onClick={() => setViewerMode('press')}
+                            style={{
+                                padding: '4px 14px',
+                                background: viewerMode === 'press' ? '#2244aa' : '#2a2d35',
+                                color: '#fff',
+                                border: '1px solid #444',
+                                borderRadius: 4,
+                                cursor: 'pointer',
+                            }}
+                        >
+                            Press
+                        </button>
+                    </div>
+                    <div
+                        ref={canvasRef}
+                        style={{
+                            width: '100%',
+                            height: 350,
+                            borderRadius: 4,
+                            overflow: 'hidden',
+                            border: '1px solid #333',
+                        }}
+                    />
+                    <p style={{ color: '#666', fontSize: 12, marginTop: 4 }}>
+                        Drag to rotate · scroll to zoom
+                    </p>
+                </section>
             </div>
         </Page>
     );
