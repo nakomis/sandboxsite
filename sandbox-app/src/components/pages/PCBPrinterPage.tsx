@@ -252,272 +252,284 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
 
     return (
         <Page tabId={tabId} index={index}>
-            <div className="page" style={{ color: '#ccc', padding: '24px 32px', maxWidth: 800 }}>
-                <h1 style={{ color: '#fff', marginBottom: 24 }}>PCB Printer</h1>
-                <p style={{ color: '#888', marginBottom: 24, fontSize: 14 }}>
+            <div className="page" style={{ color: '#ccc', padding: '12px 32px 24px' }}>
+                <h1 style={{ color: '#fff', marginBottom: 12 }}>PCB Printer</h1>
+                <p style={{ color: '#888', marginBottom: 16, fontSize: 14 }}>
                     Convert a Fritzing PCB SVG export to 3D-printable STL files (pcb board + press
                     backing plate). Export your PCB from Fritzing via <em>File → Export → as SVG</em>.
                 </p>
 
-                {/* File upload */}
-                <section style={{ marginBottom: 24 }}>
-                    <h3 style={{ color: '#ddd', marginBottom: 12 }}>Input file</h3>
-                    <label
-                        style={{
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: 12,
-                            cursor: 'pointer',
-                            padding: '8px 16px',
-                            background: '#2a2d35',
-                            border: '1px solid #444',
-                            borderRadius: 4,
-                        }}
-                    >
-                        <input
-                            type="file"
-                            accept=".svg,.fz"
-                            style={{ display: 'none' }}
-                            onChange={handleFileChange}
-                        />
-                        <span style={{ color: '#aaa' }}>Choose file (.svg or .fz)</span>
-                    </label>
-                    {fileName && (
-                        <span style={{ marginLeft: 16, color: '#4fc3f7' }}>{fileName}</span>
-                    )}
-                    {fileExt === '.fz' && (
-                        <p style={{ color: '#f9a435', fontSize: 13, marginTop: 8 }}>
-                            ⚠ .fz mode: trace positions may differ from the SVG export. Use .svg for best results.
-                        </p>
-                    )}
-                </section>
+                {/* Two-column layout */}
+                <div style={{ display: 'flex', gap: 32, alignItems: 'flex-start' }}>
 
-                {/* Options form */}
-                <section style={{ marginBottom: 24 }}>
-                    <h3 style={{ color: '#ddd', marginBottom: 12 }}>Options</h3>
-                    <div style={rowStyle}>
-                        <span style={labelStyle}>Board thickness (mm)</span>
-                        <input
-                            type="number"
-                            step="0.1"
-                            value={options.boardThicknessMm}
-                            onChange={e => handleOption('boardThicknessMm', parseFloat(e.target.value))}
-                            style={inputStyle}
-                        />
-                    </div>
-                    <div style={rowStyle}>
-                        <span style={labelStyle}>Trace recess depth (mm)</span>
-                        <input
-                            type="number"
-                            step="0.05"
-                            value={options.traceRecessMm}
-                            onChange={e => handleOption('traceRecessMm', parseFloat(e.target.value))}
-                            style={inputStyle}
-                        />
-                    </div>
-                    <div style={rowStyle}>
-                        <span style={labelStyle}>Trace clearance (mm)</span>
-                        <input
-                            type="number"
-                            step="0.05"
-                            value={options.traceClearanceMm}
-                            onChange={e => handleOption('traceClearanceMm', parseFloat(e.target.value))}
-                            style={inputStyle}
-                        />
-                    </div>
-                    <div style={rowStyle}>
-                        <span style={labelStyle}>Bump chamfer (mm)</span>
-                        <input
-                            type="number"
-                            step="0.05"
-                            min="0"
-                            value={options.bumpChamferMm}
-                            onChange={e => handleOption('bumpChamferMm', parseFloat(e.target.value))}
-                            style={inputStyle}
-                        />
-                    </div>
-                    <div style={rowStyle}>
-                        <span style={labelStyle}>Press thickness (mm)</span>
-                        <input
-                            type="number"
-                            step="0.5"
-                            value={options.pressThicknessMm}
-                            onChange={e => handleOption('pressThicknessMm', parseFloat(e.target.value))}
-                            style={inputStyle}
-                        />
-                    </div>
-                    <div style={rowStyle}>
-                        <span style={labelStyle}>Finger indent depth (mm)</span>
-                        <input
-                            type="number"
-                            step="1"
-                            min="0"
-                            value={options.fingerIndentMm}
-                            onChange={e => handleOption('fingerIndentMm', parseFloat(e.target.value))}
-                            style={inputStyle}
-                        />
-                    </div>
-                    <div style={rowStyle}>
-                        <span style={labelStyle}>Text relief (mm)</span>
-                        <input
-                            type="number"
-                            step="0.1"
-                            min="0"
-                            value={options.textReliefMm}
-                            onChange={e => handleOption('textReliefMm', parseFloat(e.target.value))}
-                            style={inputStyle}
-                        />
-                    </div>
-                    {options.textReliefMm > 0 && (
-                        <div style={rowStyle}>
-                            <span style={labelStyle}>Text font</span>
-                            <select
-                                value={selectedFont}
-                                onChange={e => setSelectedFont(e.target.value)}
-                                style={{ ...inputStyle, width: 'auto', paddingRight: 24 }}
-                            >
-                                {BUNDLED_FONTS.map(f => (
-                                    <option key={f.file} value={f.file}>{f.label}</option>
-                                ))}
-                            </select>
-                        </div>
-                    )}
-                    <div style={rowStyle}>
-                        <span style={labelStyle}>Drill diameter (mm)</span>
-                        <input
-                            type="number"
-                            step="0.05"
-                            value={options.drillDiameterMm}
-                            onChange={e => handleOption('drillDiameterMm', parseFloat(e.target.value))}
-                            style={inputStyle}
-                        />
-                    </div>
-                    <div style={rowStyle}>
-                        <span style={labelStyle}>Trace segments (circle quality)</span>
-                        <input
-                            type="number"
-                            step="4"
-                            min="8"
-                            max="64"
-                            value={options.traceSegments}
-                            onChange={e => handleOption('traceSegments', parseInt(e.target.value, 10))}
-                            style={inputStyle}
-                        />
-                    </div>
-                </section>
+                    {/* Left column: controls */}
+                    <div style={{ flex: '0 0 360px' }}>
 
-                {/* Generate button */}
-                <section style={{ marginBottom: 24 }}>
-                    <button
-                        onClick={generate}
-                        disabled={!fileContent || generating}
-                        style={{
-                            padding: '10px 28px',
-                            background: fileContent && !generating ? '#03A550' : '#2a2d35',
-                            color: '#fff',
-                            border: 'none',
-                            borderRadius: 4,
-                            fontSize: 16,
-                            cursor: fileContent && !generating ? 'pointer' : 'not-allowed',
-                        }}
-                    >
-                        {generating ? 'Generating…' : 'Generate STLs'}
-                    </button>
-                    {generating && (
-                        <span style={{ marginLeft: 16, color: '#888', fontSize: 14 }}>
-                            Running CSG — may take a few seconds…
-                        </span>
-                    )}
-                </section>
-
-                {/* Error */}
-                {error && (
-                    <section style={{ marginBottom: 24, padding: 12, background: '#3a1515', borderRadius: 4 }}>
-                        <strong style={{ color: '#f44' }}>Error:</strong>{' '}
-                        <span style={{ color: '#faa', fontSize: 14 }}>{error}</span>
-                    </section>
-                )}
-
-                {/* Download links */}
-                {stlOutputs && (
-                    <section style={{ marginBottom: 24 }}>
-                        <h3 style={{ color: '#ddd', marginBottom: 12 }}>Downloads</h3>
-                        <div style={{ display: 'flex', gap: 12 }}>
-                            <button
-                                onClick={() => downloadStl(stlOutputs.pcb, (fileName ?? 'pcb') + '-pcb.stl')}
+                        {/* File upload */}
+                        <section style={{ marginBottom: 16 }}>
+                            <h3 style={{ color: '#ddd', marginBottom: 10 }}>Input file</h3>
+                            <label
                                 style={{
-                                    padding: '8px 20px',
-                                    background: '#03A550',
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 8,
+                                    cursor: 'pointer',
+                                    padding: '4px 10px',
+                                    background: '#2a2d35',
+                                    border: '1px solid #444',
+                                    borderRadius: 4,
+                                }}
+                            >
+                                <input
+                                    type="file"
+                                    accept=".svg,.fz"
+                                    style={{ display: 'none' }}
+                                    onChange={handleFileChange}
+                                />
+                                <span style={{ color: '#aaa', fontSize: 13 }}>Choose file (.svg or .fz)</span>
+                            </label>
+                            {fileName && (
+                                <span style={{ marginLeft: 12, color: '#4fc3f7', fontSize: 13 }}>{fileName}</span>
+                            )}
+                            {fileExt === '.fz' && (
+                                <p style={{ color: '#f9a435', fontSize: 13, marginTop: 8 }}>
+                                    ⚠ .fz mode: trace positions may differ from the SVG export. Use .svg for best results.
+                                </p>
+                            )}
+                        </section>
+
+                        {/* Options form */}
+                        <section style={{ marginBottom: 16 }}>
+                            <h3 style={{ color: '#ddd', marginBottom: 10 }}>Options</h3>
+                            <div style={rowStyle}>
+                                <span style={labelStyle}>Board thickness (mm)</span>
+                                <input
+                                    type="number"
+                                    step="0.1"
+                                    value={options.boardThicknessMm}
+                                    onChange={e => handleOption('boardThicknessMm', parseFloat(e.target.value))}
+                                    style={inputStyle}
+                                />
+                            </div>
+                            <div style={rowStyle}>
+                                <span style={labelStyle}>Trace recess depth (mm)</span>
+                                <input
+                                    type="number"
+                                    step="0.05"
+                                    value={options.traceRecessMm}
+                                    onChange={e => handleOption('traceRecessMm', parseFloat(e.target.value))}
+                                    style={inputStyle}
+                                />
+                            </div>
+                            <div style={rowStyle}>
+                                <span style={labelStyle}>Trace clearance (mm)</span>
+                                <input
+                                    type="number"
+                                    step="0.05"
+                                    value={options.traceClearanceMm}
+                                    onChange={e => handleOption('traceClearanceMm', parseFloat(e.target.value))}
+                                    style={inputStyle}
+                                />
+                            </div>
+                            <div style={rowStyle}>
+                                <span style={labelStyle}>Bump chamfer (mm)</span>
+                                <input
+                                    type="number"
+                                    step="0.05"
+                                    min="0"
+                                    value={options.bumpChamferMm}
+                                    onChange={e => handleOption('bumpChamferMm', parseFloat(e.target.value))}
+                                    style={inputStyle}
+                                />
+                            </div>
+                            <div style={rowStyle}>
+                                <span style={labelStyle}>Press thickness (mm)</span>
+                                <input
+                                    type="number"
+                                    step="0.5"
+                                    value={options.pressThicknessMm}
+                                    onChange={e => handleOption('pressThicknessMm', parseFloat(e.target.value))}
+                                    style={inputStyle}
+                                />
+                            </div>
+                            <div style={rowStyle}>
+                                <span style={labelStyle}>Finger indent depth (mm)</span>
+                                <input
+                                    type="number"
+                                    step="1"
+                                    min="0"
+                                    value={options.fingerIndentMm}
+                                    onChange={e => handleOption('fingerIndentMm', parseFloat(e.target.value))}
+                                    style={inputStyle}
+                                />
+                            </div>
+                            <div style={rowStyle}>
+                                <span style={labelStyle}>Text relief (mm)</span>
+                                <input
+                                    type="number"
+                                    step="0.1"
+                                    min="0"
+                                    value={options.textReliefMm}
+                                    onChange={e => handleOption('textReliefMm', parseFloat(e.target.value))}
+                                    style={inputStyle}
+                                />
+                            </div>
+                            {options.textReliefMm > 0 && (
+                                <div style={rowStyle}>
+                                    <span style={labelStyle}>Text font</span>
+                                    <select
+                                        value={selectedFont}
+                                        onChange={e => setSelectedFont(e.target.value)}
+                                        style={{ ...inputStyle, width: 'auto', paddingRight: 24 }}
+                                    >
+                                        {BUNDLED_FONTS.map(f => (
+                                            <option key={f.file} value={f.file}>{f.label}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            )}
+                            <div style={rowStyle}>
+                                <span style={labelStyle}>Drill diameter (mm)</span>
+                                <input
+                                    type="number"
+                                    step="0.05"
+                                    value={options.drillDiameterMm}
+                                    onChange={e => handleOption('drillDiameterMm', parseFloat(e.target.value))}
+                                    style={inputStyle}
+                                />
+                            </div>
+                            <div style={rowStyle}>
+                                <span style={labelStyle}>Trace segments (circle quality)</span>
+                                <input
+                                    type="number"
+                                    step="4"
+                                    min="8"
+                                    max="64"
+                                    value={options.traceSegments}
+                                    onChange={e => handleOption('traceSegments', parseInt(e.target.value, 10))}
+                                    style={inputStyle}
+                                />
+                            </div>
+                        </section>
+
+                        {/* Generate button */}
+                        <section style={{ marginBottom: 16 }}>
+                            <button
+                                onClick={generate}
+                                disabled={!fileContent || generating}
+                                style={{
+                                    padding: '10px 28px',
+                                    background: fileContent && !generating ? '#03A550' : '#2a2d35',
                                     color: '#fff',
                                     border: 'none',
                                     borderRadius: 4,
-                                    cursor: 'pointer',
+                                    fontSize: 16,
+                                    cursor: fileContent && !generating ? 'pointer' : 'not-allowed',
                                 }}
                             >
-                                Download PCB STL
+                                {generating ? 'Generating…' : 'Generate STLs'}
                             </button>
-                            <button
-                                onClick={() => downloadStl(stlOutputs.press, (fileName ?? 'pcb') + '-press.stl')}
-                                style={{
-                                    padding: '8px 20px',
-                                    background: '#2244aa',
-                                    color: '#fff',
-                                    border: 'none',
-                                    borderRadius: 4,
-                                    cursor: 'pointer',
-                                }}
-                            >
-                                Download Press STL
-                            </button>
-                        </div>
-                    </section>
-                )}
+                            {generating && (
+                                <span style={{ marginLeft: 16, color: '#888', fontSize: 14 }}>
+                                    Running CSG — may take a few seconds…
+                                </span>
+                            )}
+                        </section>
 
-                {/* STL viewer — section always in DOM so Three.js can init on mount */}
-                <section style={{ display: stlOutputs ? undefined : 'none' }}>
-                    <h3 style={{ color: '#ddd', marginBottom: 8 }}>Preview</h3>
-                    <div style={{ display: 'flex', gap: 12, marginBottom: 8 }}>
-                        <button
-                            onClick={() => setViewerMode('pcb')}
-                            style={{
-                                padding: '4px 14px',
-                                background: viewerMode === 'pcb' ? '#03A550' : '#2a2d35',
-                                color: '#fff',
-                                border: '1px solid #444',
-                                borderRadius: 4,
-                                cursor: 'pointer',
-                            }}
-                        >
-                            PCB
-                        </button>
-                        <button
-                            onClick={() => setViewerMode('press')}
-                            style={{
-                                padding: '4px 14px',
-                                background: viewerMode === 'press' ? '#2244aa' : '#2a2d35',
-                                color: '#fff',
-                                border: '1px solid #444',
-                                borderRadius: 4,
-                                cursor: 'pointer',
-                            }}
-                        >
-                            Press
-                        </button>
+                        {/* Error */}
+                        {error && (
+                            <section style={{ padding: 12, background: '#3a1515', borderRadius: 4 }}>
+                                <strong style={{ color: '#f44' }}>Error:</strong>{' '}
+                                <span style={{ color: '#faa', fontSize: 14 }}>{error}</span>
+                            </section>
+                        )}
                     </div>
-                    <div
-                        ref={canvasRef}
-                        style={{
-                            width: '100%',
-                            height: 350,
-                            borderRadius: 4,
-                            overflow: 'hidden',
-                            border: '1px solid #333',
-                        }}
-                    />
-                    <p style={{ color: '#666', fontSize: 12, marginTop: 4 }}>
-                        Drag to rotate · scroll to zoom
-                    </p>
-                </section>
+
+                    {/* Right column: preview + downloads */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+
+                        {/* STL viewer — always in DOM so Three.js can init on mount */}
+                        <section style={{ display: stlOutputs ? undefined : 'none' }}>
+                            <h3 style={{ color: '#ddd', marginBottom: 8 }}>Preview</h3>
+                            <div style={{ display: 'flex', gap: 12, marginBottom: 8 }}>
+                                <button
+                                    onClick={() => setViewerMode('pcb')}
+                                    style={{
+                                        padding: '4px 14px',
+                                        background: viewerMode === 'pcb' ? '#03A550' : '#2a2d35',
+                                        color: '#fff',
+                                        border: '1px solid #444',
+                                        borderRadius: 4,
+                                        cursor: 'pointer',
+                                    }}
+                                >
+                                    PCB
+                                </button>
+                                <button
+                                    onClick={() => setViewerMode('press')}
+                                    style={{
+                                        padding: '4px 14px',
+                                        background: viewerMode === 'press' ? '#2244aa' : '#2a2d35',
+                                        color: '#fff',
+                                        border: '1px solid #444',
+                                        borderRadius: 4,
+                                        cursor: 'pointer',
+                                    }}
+                                >
+                                    Press
+                                </button>
+                            </div>
+                            <div
+                                ref={canvasRef}
+                                style={{
+                                    width: '100%',
+                                    height: 350,
+                                    borderRadius: 4,
+                                    overflow: 'hidden',
+                                    border: '1px solid #333',
+                                }}
+                            />
+                            <p style={{ color: '#666', fontSize: 12, marginTop: 4 }}>
+                                Drag to rotate · scroll to zoom
+                            </p>
+                        </section>
+
+                        {/* Downloads — below preview */}
+                        {stlOutputs && (
+                            <section style={{ marginTop: 16 }}>
+                                <h3 style={{ color: '#ddd', marginBottom: 12 }}>Downloads</h3>
+                                <div style={{ display: 'flex', gap: 12 }}>
+                                    <button
+                                        onClick={() => downloadStl(stlOutputs.pcb, (fileName ?? 'pcb') + '-pcb.stl')}
+                                        style={{
+                                            padding: '8px 20px',
+                                            background: '#03A550',
+                                            color: '#fff',
+                                            border: 'none',
+                                            borderRadius: 4,
+                                            cursor: 'pointer',
+                                        }}
+                                    >
+                                        Download PCB STL
+                                    </button>
+                                    <button
+                                        onClick={() => downloadStl(stlOutputs.press, (fileName ?? 'pcb') + '-press.stl')}
+                                        style={{
+                                            padding: '8px 20px',
+                                            background: '#2244aa',
+                                            color: '#fff',
+                                            border: 'none',
+                                            borderRadius: 4,
+                                            cursor: 'pointer',
+                                        }}
+                                    >
+                                        Download Press STL
+                                    </button>
+                                </div>
+                            </section>
+                        )}
+                    </div>
+                </div>
             </div>
         </Page>
     );
