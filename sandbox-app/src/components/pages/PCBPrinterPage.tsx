@@ -21,6 +21,11 @@ type PCBPrinterProps = PageProps & {
 
 type ViewerMode = 'pcb' | 'press';
 
+const BUNDLED_FONTS: { label: string; file: string }[] = [
+    { label: 'JetBrains Mono', file: 'fonts/JetBrainsMono-Regular.woff' },
+    { label: 'Droid Sans Mono', file: 'fonts/DroidSansMono.ttf' },
+];
+
 // Subset of PrinterOptions relevant to the UI (outDir and writeSvg are CLI-only)
 type UIOptions = Omit<PrinterOptions, 'outDir' | 'writeSvg' | 'boardColor' | 'snapToleranceMm'>;
 
@@ -41,6 +46,7 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
     const [fileContent, setFileContent] = useState<string | null>(null);
     const [fileExt, setFileExt] = useState<string>('.svg');
     const [options, setOptions] = useState<UIOptions>(DEFAULT_UI_OPTIONS);
+    const [selectedFont, setSelectedFont] = useState<string>(BUNDLED_FONTS[0].file);
 
     const [stlOutputs, setStlOutputs] = useState<StlOutputs | null>(null);
     const [generating, setGenerating] = useState(false);
@@ -90,7 +96,7 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
             // Load bundled monospace font when text relief is requested
             if (fullOptions.textReliefMm > 0) {
                 try {
-                    const fontResp = await fetch(process.env.PUBLIC_URL + '/fonts/JetBrainsMono-Regular.woff');
+                    const fontResp = await fetch(process.env.PUBLIC_URL + '/' + selectedFont);
                     fullOptions.fontData = await fontResp.arrayBuffer();
                 } catch { /* text relief silently skipped if font fetch fails */ }
             }
@@ -110,7 +116,7 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
         } finally {
             setGenerating(false);
         }
-    }, [fileContent, fileExt, options]);
+    }, [fileContent, fileExt, options, selectedFont]);
 
     const downloadStl = useCallback((buf: ArrayBuffer, name: string) => {
         const blob = new Blob([buf], { type: 'model/stl' });
@@ -362,6 +368,20 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
                             style={inputStyle}
                         />
                     </div>
+                    {options.textReliefMm > 0 && (
+                        <div style={rowStyle}>
+                            <span style={labelStyle}>Text font</span>
+                            <select
+                                value={selectedFont}
+                                onChange={e => setSelectedFont(e.target.value)}
+                                style={{ ...inputStyle, width: 'auto', paddingRight: 24 }}
+                            >
+                                {BUNDLED_FONTS.map(f => (
+                                    <option key={f.file} value={f.file}>{f.label}</option>
+                                ))}
+                            </select>
+                        </div>
+                    )}
                     <div style={rowStyle}>
                         <span style={labelStyle}>Drill diameter (mm)</span>
                         <input
