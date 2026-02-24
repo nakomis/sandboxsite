@@ -214,7 +214,10 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
         box.getSize(size);
         const maxDim = Math.max(size.x, size.y, size.z);
         ctx.camera.position.set(0, -maxDim * 1.8, maxDim * 1.2);
-        ctx.controls.reset();
+        ctx.camera.lookAt(0, 0, 0);
+        ctx.controls.target.set(0, 0, 0);
+        ctx.controls.saveState(); // save so reset() returns here, not mount position
+        ctx.controls.update();
 
         ctx.scene.add(mesh);
         ctx.mesh = mesh;
