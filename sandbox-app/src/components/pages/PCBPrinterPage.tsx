@@ -31,6 +31,7 @@ const DEFAULT_UI_OPTIONS: UIOptions = {
     bumpChamferMm: DEFAULT_OPTIONS.bumpChamferMm,
     pressThicknessMm: DEFAULT_OPTIONS.pressThicknessMm,
     fingerIndentMm: DEFAULT_OPTIONS.fingerIndentMm,
+    textReliefMm: DEFAULT_OPTIONS.textReliefMm,
     drillDiameterMm: DEFAULT_OPTIONS.drillDiameterMm,
     traceSegments: DEFAULT_OPTIONS.traceSegments,
 };
@@ -330,6 +331,17 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
                             min="0"
                             value={options.fingerIndentMm}
                             onChange={e => handleOption('fingerIndentMm', parseFloat(e.target.value))}
+                            style={inputStyle}
+                        />
+                    </div>
+                    <div style={rowStyle}>
+                        <span style={labelStyle}>Text relief (mm)</span>
+                        <input
+                            type="number"
+                            step="0.1"
+                            min="0"
+                            value={options.textReliefMm}
+                            onChange={e => handleOption('textReliefMm', parseFloat(e.target.value))}
                             style={inputStyle}
                         />
                     </div>
