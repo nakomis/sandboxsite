@@ -5,7 +5,6 @@ import {
 } from '@aws-sdk/client-cognito-identity';
 import {
     parseFritzingSvg,
-    parseFritzingFz,
     snapTracesToPads,
     buildStls,
     DEFAULT_OPTIONS,
@@ -44,7 +43,6 @@ const DEFAULT_UI_OPTIONS: UIOptions = {
 const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
     const [fileName, setFileName] = useState<string | null>(null);
     const [fileContent, setFileContent] = useState<string | null>(null);
-    const [fileExt, setFileExt] = useState<string>('.svg');
     const [options, setOptions] = useState<UIOptions>(DEFAULT_UI_OPTIONS);
     const [selectedFont, setSelectedFont] = useState<string>(BUNDLED_FONTS[0].file);
 
@@ -67,8 +65,6 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
     const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
-        const ext = file.name.toLowerCase().endsWith('.fz') ? '.fz' : '.svg';
-        setFileExt(ext);
         setFileName(file.name);
         setStlOutputs(null);
         setError(null);
@@ -100,12 +96,7 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
                     fullOptions.fontData = await fontResp.arrayBuffer();
                 } catch { /* text relief silently skipped if font fetch fails */ }
             }
-            let model;
-            if (fileExt === '.fz') {
-                model = parseFritzingFz(fileContent);
-            } else {
-                model = parseFritzingSvg(fileContent, fullOptions);
-            }
+            const model = parseFritzingSvg(fileContent, fullOptions);
             snapTracesToPads(model, fullOptions);
             const outputs = await buildStls(model, fullOptions, {
                 locateFile: (f: string) => process.env.PUBLIC_URL + '/' + f,
@@ -116,7 +107,7 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
         } finally {
             setGenerating(false);
         }
-    }, [fileContent, fileExt, options, selectedFont]);
+    }, [fileContent, options, selectedFont]);
 
     const downloadStl = useCallback((buf: ArrayBuffer, name: string) => {
         const blob = new Blob([buf], { type: 'model/stl' });
@@ -255,8 +246,7 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
             <div className="page" style={{ color: '#ccc', padding: '12px 32px 24px' }}>
                 <h1 style={{ color: '#fff', marginBottom: 12 }}>PCB Printer</h1>
                 <p style={{ color: '#888', marginBottom: 16, fontSize: 14 }}>
-                    Convert a Fritzing PCB SVG export to 3D-printable STL files (pcb board + press
-                    backing plate). Export your PCB from Fritzing via <em>File → Export → as SVG</em>.
+                    Export your PCB from Fritzing via <em>File → Export → as Image → SVG…</em>
                 </p>
 
                 {/* Two-column layout */}
@@ -282,19 +272,14 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
                             >
                                 <input
                                     type="file"
-                                    accept=".svg,.fz"
+                                    accept=".svg"
                                     style={{ display: 'none' }}
                                     onChange={handleFileChange}
                                 />
-                                <span style={{ color: '#aaa', fontSize: 13 }}>Choose file (.svg or .fz)</span>
+                                <span style={{ color: '#aaa', fontSize: 13 }}>Choose SVG file</span>
                             </label>
                             {fileName && (
                                 <span style={{ marginLeft: 12, color: '#4fc3f7', fontSize: 13 }}>{fileName}</span>
-                            )}
-                            {fileExt === '.fz' && (
-                                <p style={{ color: '#f9a435', fontSize: 13, marginTop: 8 }}>
-                                    ⚠ .fz mode: trace positions may differ from the SVG export. Use .svg for best results.
-                                </p>
                             )}
                         </section>
 
