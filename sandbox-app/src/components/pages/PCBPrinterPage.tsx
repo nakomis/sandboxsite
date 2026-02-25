@@ -396,13 +396,8 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
                                     cursor: fileContent && !generating ? 'pointer' : 'not-allowed',
                                 }}
                             >
-                                {generating ? 'Generating…' : 'Generate STLs'}
+                                {generating ? 'Triangulating…' : 'Generate STLs'}
                             </button>
-                            {generating && (
-                                <span style={{ marginLeft: 12, color: '#888', fontSize: 14 }}>
-                                    Running CSG — may take a few seconds…
-                                </span>
-                            )}
                         </section>
 
                         {/* Error */}
