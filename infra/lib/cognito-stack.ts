@@ -165,7 +165,87 @@ export class CognitoStack extends cdk.Stack {
         new cognito.CfnManagedLoginBranding(this, 'SandboxManagedLoginBranding', {
             userPoolId: this.userPool.userPoolId,
             clientId: this.userPoolClient.userPoolClientId,
-            useCognitoProvidedValues: true,
+            useCognitoProvidedValues: false,
+            settings: {
+                components: {
+                    pageBackground: {
+                        image: { enabled: false },
+                        lightMode: { color: '1e1e1eff' },
+                        darkMode:  { color: '1e1e1eff' },
+                    },
+                    pageHeader: {
+                        backgroundImage: { enabled: false },
+                        logo: { location: 'START', enabled: false },
+                        lightMode: { background: { color: '181a1eff' }, borderColor: '333333ff' },
+                        darkMode:  { background: { color: '181a1eff' }, borderColor: '333333ff' },
+                    },
+                    pageFooter: {
+                        backgroundImage: { enabled: false },
+                        logo: { location: 'START', enabled: false },
+                        lightMode: { background: { color: '181a1eff' }, borderColor: '333333ff' },
+                        darkMode:  { background: { color: '181a1eff' }, borderColor: '333333ff' },
+                    },
+                    form: {
+                        borderRadius: 8,
+                        backgroundImage: { enabled: false },
+                        logo: { location: 'CENTER', position: 'TOP', enabled: false, formInclusion: 'IN' },
+                        lightMode: { backgroundColor: '2a2d35ff', borderColor: '444444ff' },
+                        darkMode:  { backgroundColor: '2a2d35ff', borderColor: '444444ff' },
+                    },
+                    pageText: {
+                        lightMode: { bodyColor: 'ccccccff', headingColor: 'ffffffff', descriptionColor: '888888ff' },
+                        darkMode:  { bodyColor: 'ccccccff', headingColor: 'ffffffff', descriptionColor: '888888ff' },
+                    },
+                    primaryButton: {
+                        lightMode: {
+                            defaults: { backgroundColor: '03a550ff', textColor: 'ffffffff' },
+                            hover:    { backgroundColor: '029040ff', textColor: 'ffffffff' },
+                            active:   { backgroundColor: '027530ff', textColor: 'ffffffff' },
+                            disabled: { backgroundColor: '2a2d35ff', borderColor: '555555ff' },
+                        },
+                        darkMode: {
+                            defaults: { backgroundColor: '03a550ff', textColor: 'ffffffff' },
+                            hover:    { backgroundColor: '029040ff', textColor: 'ffffffff' },
+                            active:   { backgroundColor: '027530ff', textColor: 'ffffffff' },
+                            disabled: { backgroundColor: '2a2d35ff', borderColor: '555555ff' },
+                        },
+                    },
+                    secondaryButton: {
+                        lightMode: {
+                            defaults: { backgroundColor: '2a2d35ff', borderColor: '444444ff', textColor: 'ccccccff' },
+                            hover:    { backgroundColor: '333740ff', borderColor: '666666ff', textColor: 'ffffffff' },
+                            active:   { backgroundColor: '1e2028ff', borderColor: '444444ff', textColor: 'ffffffff' },
+                        },
+                        darkMode: {
+                            defaults: { backgroundColor: '2a2d35ff', borderColor: '444444ff', textColor: 'ccccccff' },
+                            hover:    { backgroundColor: '333740ff', borderColor: '666666ff', textColor: 'ffffffff' },
+                            active:   { backgroundColor: '1e2028ff', borderColor: '444444ff', textColor: 'ffffffff' },
+                        },
+                    },
+                    alert: {
+                        borderRadius: 4,
+                        lightMode: { error: { backgroundColor: '3a1515ff', borderColor: 'f44444ff' } },
+                        darkMode:  { error: { backgroundColor: '3a1515ff', borderColor: 'f44444ff' } },
+                    },
+                    idpButton: {
+                        standard: {
+                            lightMode: {
+                                defaults: { backgroundColor: '2a2d35ff', borderColor: '444444ff', textColor: 'ccccccff' },
+                                hover:    { backgroundColor: '333740ff', borderColor: '666666ff', textColor: 'ffffffff' },
+                                active:   { backgroundColor: '1e2028ff', borderColor: '444444ff', textColor: 'ffffffff' },
+                            },
+                            darkMode: {
+                                defaults: { backgroundColor: '2a2d35ff', borderColor: '444444ff', textColor: 'ccccccff' },
+                                hover:    { backgroundColor: '333740ff', borderColor: '666666ff', textColor: 'ffffffff' },
+                                active:   { backgroundColor: '1e2028ff', borderColor: '444444ff', textColor: 'ffffffff' },
+                            },
+                        },
+                        custom: {},
+                    },
+                    phoneNumberSelector: { displayType: 'TEXT' },
+                    favicon: { enabledTypes: ['ICO', 'SVG'] },
+                },
+            },
         });
 
         const hostedZone = route53.HostedZone.fromLookup(this, 'SandboxHostedZoneLookup', {
