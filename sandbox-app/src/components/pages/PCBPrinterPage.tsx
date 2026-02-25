@@ -20,11 +20,6 @@ type PCBPrinterProps = PageProps & {
 
 type ViewerMode = 'pcb' | 'press';
 
-const BUNDLED_FONTS: { label: string; file: string }[] = [
-    { label: 'JetBrains Mono', file: 'fonts/JetBrainsMono-Regular.woff' },
-    { label: 'Droid Sans Mono', file: 'fonts/DroidSansMono.ttf' },
-];
-
 // Subset of PrinterOptions relevant to the UI (outDir and writeSvg are CLI-only)
 type UIOptions = Omit<PrinterOptions, 'outDir' | 'writeSvg' | 'boardColor' | 'snapToleranceMm'>;
 
@@ -35,7 +30,7 @@ const DEFAULT_UI_OPTIONS: UIOptions = {
     bumpChamferMm: DEFAULT_OPTIONS.bumpChamferMm,
     pressThicknessMm: DEFAULT_OPTIONS.pressThicknessMm,
     fingerIndentMm: DEFAULT_OPTIONS.fingerIndentMm,
-    textReliefMm: DEFAULT_OPTIONS.textReliefMm,
+    textReliefMm: 0.5,
     drillDiameterMm: DEFAULT_OPTIONS.drillDiameterMm,
     traceSegments: DEFAULT_OPTIONS.traceSegments,
 };
@@ -44,7 +39,6 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
     const [fileName, setFileName] = useState<string | null>(null);
     const [fileContent, setFileContent] = useState<string | null>(null);
     const [options, setOptions] = useState<UIOptions>(DEFAULT_UI_OPTIONS);
-    const [selectedFont, setSelectedFont] = useState<string>(BUNDLED_FONTS[0].file);
 
     const [stlOutputs, setStlOutputs] = useState<StlOutputs | null>(null);
     const [generating, setGenerating] = useState(false);
@@ -89,10 +83,10 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
                 ...DEFAULT_OPTIONS,
                 ...options,
             };
-            // Load bundled monospace font when text relief is requested
+            // Load bundled Droid Sans Mono when text relief is requested
             if (fullOptions.textReliefMm > 0) {
                 try {
-                    const fontResp = await fetch(process.env.PUBLIC_URL + '/' + selectedFont);
+                    const fontResp = await fetch(process.env.PUBLIC_URL + '/fonts/DroidSansMono.ttf');
                     fullOptions.fontData = await fontResp.arrayBuffer();
                 } catch { /* text relief silently skipped if font fetch fails */ }
             }
@@ -107,7 +101,7 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
         } finally {
             setGenerating(false);
         }
-    }, [fileContent, options, selectedFont]);
+    }, [fileContent, options]);
 
     const downloadStl = useCallback((buf: ArrayBuffer, name: string) => {
         const blob = new Blob([buf], { type: 'model/stl' });
@@ -242,14 +236,14 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
         display: 'flex',
         alignItems: 'center',
         gap: 12,
-        marginBottom: 8,
+        marginBottom: 5,
     };
 
     return (
         <Page tabId={tabId} index={index}>
-            <div className="page" style={{ color: '#ccc', padding: '12px 32px 24px' }}>
-                <h1 style={{ color: '#fff', marginBottom: 12 }}>PCB Printer</h1>
-                <p style={{ color: '#888', marginBottom: 16, fontSize: 14 }}>
+            <div className="page" style={{ color: '#ccc', padding: '8px 32px 16px' }}>
+                <h1 style={{ color: '#fff', marginBottom: 6 }}>PCB Printer</h1>
+                <p style={{ color: '#888', marginBottom: 10, fontSize: 14 }}>
                     Export your PCB from Fritzing via <em>File → Export → as Image → SVG…</em>
                 </p>
 
@@ -257,11 +251,11 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
                 <div style={{ display: 'flex', gap: 32, alignItems: 'stretch' }}>
 
                     {/* Left column: controls */}
-                    <div style={{ flex: '0 0 360px' }}>
+                    <div style={{ flex: '0 0 360px', display: 'flex', flexDirection: 'column' }}>
 
                         {/* File upload */}
-                        <section style={{ marginBottom: 16 }}>
-                            <h3 style={{ color: '#ddd', marginBottom: 10 }}>Input file</h3>
+                        <section style={{ marginBottom: 10 }}>
+                            <h3 style={{ color: '#ddd', marginBottom: 6 }}>Input file</h3>
                             <label
                                 style={{
                                     display: 'inline-flex',
@@ -288,8 +282,8 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
                         </section>
 
                         {/* Options form */}
-                        <section style={{ marginBottom: 16 }}>
-                            <h3 style={{ color: '#ddd', marginBottom: 10 }}>Options</h3>
+                        <section style={{ flex: 1, marginBottom: 10 }}>
+                            <h3 style={{ color: '#ddd', marginBottom: 6 }}>Options</h3>
                             <div style={rowStyle}>
                                 <span style={labelStyle}>Board thickness (mm)</span>
                                 <input
@@ -363,20 +357,6 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
                                     style={inputStyle}
                                 />
                             </div>
-                            {options.textReliefMm > 0 && (
-                                <div style={rowStyle}>
-                                    <span style={labelStyle}>Text font</span>
-                                    <select
-                                        value={selectedFont}
-                                        onChange={e => setSelectedFont(e.target.value)}
-                                        style={{ ...inputStyle, width: 'auto', paddingRight: 24 }}
-                                    >
-                                        {BUNDLED_FONTS.map(f => (
-                                            <option key={f.file} value={f.file}>{f.label}</option>
-                                        ))}
-                                    </select>
-                                </div>
-                            )}
                             <div style={rowStyle}>
                                 <span style={labelStyle}>Drill diameter (mm)</span>
                                 <input
@@ -402,7 +382,7 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
                         </section>
 
                         {/* Generate button */}
-                        <section style={{ marginBottom: 16 }}>
+                        <section style={{ marginBottom: 0 }}>
                             <button
                                 onClick={generate}
                                 disabled={!fileContent || generating}
@@ -439,7 +419,7 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
 
                         {/* STL viewer — always in DOM so Three.js can init on mount */}
                         <section style={{ flex: 1, display: stlOutputs ? 'flex' : 'none', flexDirection: 'column' }}>
-                            <h3 style={{ color: '#ddd', marginBottom: 8 }}>Preview</h3>
+                            <h3 style={{ color: '#ddd', marginBottom: 6 }}>Preview</h3>
                             <div style={{ display: 'flex', gap: 12, marginBottom: 8 }}>
                                 <button
                                     onClick={() => setViewerMode('pcb')}
