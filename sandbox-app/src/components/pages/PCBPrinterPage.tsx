@@ -18,7 +18,7 @@ type PCBPrinterProps = PageProps & {
     creds: AWSCredentials | null;
 };
 
-type ViewerMode = 'pcb' | 'press';
+type ViewerMode = 'svg' | 'pcb' | 'press';
 
 // Subset of PrinterOptions relevant to the UI (outDir and writeSvg are CLI-only)
 type UIOptions = Omit<PrinterOptions, 'outDir' | 'writeSvg' | 'boardColor' | 'snapToleranceMm'>;
@@ -43,7 +43,7 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
     const [stlOutputs, setStlOutputs] = useState<StlOutputs | null>(null);
     const [generating, setGenerating] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [viewerMode, setViewerMode] = useState<ViewerMode>('pcb');
+    const [viewerMode, setViewerMode] = useState<ViewerMode>('svg');
 
     // STL viewer refs
     const canvasRef = useRef<HTMLDivElement>(null);
@@ -55,6 +55,11 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
         mesh: THREE.Mesh | null;
         animFrame: number;
     } | null>(null);
+
+    // Auto-switch to SVG preview when a file is loaded
+    useEffect(() => {
+        if (fileContent) setViewerMode('svg');
+    }, [fileContent]);
 
     const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -96,6 +101,7 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
                 locateFile: (f: string) => process.env.PUBLIC_URL + '/' + f,
             });
             setStlOutputs(outputs);
+            setViewerMode('pcb');
         } catch (err) {
             setError(String(err));
         } finally {
@@ -113,7 +119,7 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
         URL.revokeObjectURL(url);
     }, []);
 
-    // ── Three.js STL viewer ───────────────────────────────────────────────────
+    // ── Three.js viewer ───────────────────────────────────────────────────────
     useEffect(() => {
         const container = canvasRef.current;
         if (!container) return;
@@ -162,20 +168,23 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
         };
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // Load STL into viewer when outputs change or viewerMode changes
+    // Load content into viewer when mode or content changes
     useEffect(() => {
         const ctx = sceneRef.current;
         if (!ctx) return;
+        let cancelled = false;
 
+        // Clear existing mesh and dispose its resources
         if (ctx.mesh) {
             ctx.scene.remove(ctx.mesh);
             ctx.mesh.geometry.dispose();
+            const mat = ctx.mesh.material as THREE.MeshBasicMaterial | THREE.MeshPhongMaterial;
+            if ('map' in mat && mat.map) mat.map.dispose();
+            mat.dispose();
             ctx.mesh = null;
         }
 
-        if (!stlOutputs) return;
-
-        // Resize renderer to actual container dimensions now that the section is visible
+        // Resize renderer to actual container dimensions
         const container = canvasRef.current;
         if (container) {
             const w = container.clientWidth || 720;
@@ -185,38 +194,80 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
             ctx.camera.updateProjectionMatrix();
         }
 
-        const buf = viewerMode === 'pcb' ? stlOutputs.pcb : stlOutputs.press;
-        const loader = new STLLoader();
-        const geometry = loader.parse(buf);
-        geometry.computeVertexNormals();
+        if (viewerMode === 'svg' && fileContent) {
+            // Parse aspect ratio from SVG width/height or viewBox
+            const parser = new DOMParser();
+            const svgDoc = parser.parseFromString(fileContent, 'image/svg+xml');
+            const svgEl = svgDoc.documentElement;
+            let svgW = parseFloat(svgEl.getAttribute('width') || '0');
+            let svgH = parseFloat(svgEl.getAttribute('height') || '0');
+            const vb = svgEl.getAttribute('viewBox')?.trim().split(/[\s,]+/).map(Number);
+            if ((!svgW || !svgH) && vb && vb.length === 4) { svgW = vb[2]; svgH = vb[3]; }
+            const aspect = (svgW && svgH) ? svgW / svgH : 4 / 3;
 
-        const material = new THREE.MeshPhongMaterial({
-            color: viewerMode === 'pcb' ? 0x03A550 : 0x2244aa,
-            specular: 0x444444,
-            shininess: 40,
-        });
-        const mesh = new THREE.Mesh(geometry, material);
+            const blob = new Blob([fileContent], { type: 'image/svg+xml' });
+            const url = URL.createObjectURL(blob);
+            new THREE.TextureLoader().load(url, (texture) => {
+                URL.revokeObjectURL(url);
+                if (cancelled) { texture.dispose(); return; }
 
-        // Centre the mesh
-        geometry.computeBoundingBox();
-        const box = geometry.boundingBox!;
-        const centre = new THREE.Vector3();
-        box.getCenter(centre);
-        mesh.position.sub(centre);
+                const planeH = 100;
+                const geo = new THREE.PlaneGeometry(planeH * aspect, planeH);
+                const mat = new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide });
+                const mesh = new THREE.Mesh(geo, mat);
 
-        // Zoom camera to fit
-        const size = new THREE.Vector3();
-        box.getSize(size);
-        const maxDim = Math.max(size.x, size.y, size.z);
-        ctx.camera.position.set(0, -maxDim * 1.8, maxDim * 1.2);
-        ctx.camera.lookAt(0, 0, 0);
-        ctx.controls.target.set(0, 0, 0);
-        ctx.controls.saveState(); // save so reset() returns here, not mount position
-        ctx.controls.update();
+                // Camera faces the XY plane from +Z; Y-up for natural SVG orientation
+                ctx.camera.up.set(0, 1, 0);
+                ctx.camera.position.set(0, 0, planeH * 1.5);
+                ctx.camera.lookAt(0, 0, 0);
+                ctx.controls.target.set(0, 0, 0);
+                // Pan + zoom only for flat SVG; rotation is confusing for a 2D image
+                ctx.controls.enableRotate = false;
+                ctx.controls.saveState();
+                ctx.controls.update();
 
-        ctx.scene.add(mesh);
-        ctx.mesh = mesh;
-    }, [stlOutputs, viewerMode]);
+                ctx.scene.add(mesh);
+                ctx.mesh = mesh;
+            }, undefined, () => URL.revokeObjectURL(url));
+
+        } else if ((viewerMode === 'pcb' || viewerMode === 'press') && stlOutputs) {
+            const buf = viewerMode === 'pcb' ? stlOutputs.pcb : stlOutputs.press;
+            const loader = new STLLoader();
+            const geometry = loader.parse(buf);
+            geometry.computeVertexNormals();
+
+            const material = new THREE.MeshPhongMaterial({
+                color: viewerMode === 'pcb' ? 0x03A550 : 0x2244aa,
+                specular: 0x444444,
+                shininess: 40,
+            });
+            const mesh = new THREE.Mesh(geometry, material);
+
+            geometry.computeBoundingBox();
+            const box = geometry.boundingBox!;
+            const centre = new THREE.Vector3();
+            box.getCenter(centre);
+            mesh.position.sub(centre);
+
+            const size = new THREE.Vector3();
+            box.getSize(size);
+            const maxDim = Math.max(size.x, size.y, size.z);
+
+            // Restore Z-up for 3D STL viewing
+            ctx.camera.up.set(0, 0, 1);
+            ctx.camera.position.set(0, -maxDim * 1.8, maxDim * 1.2);
+            ctx.camera.lookAt(0, 0, 0);
+            ctx.controls.target.set(0, 0, 0);
+            ctx.controls.enableRotate = true;
+            ctx.controls.saveState();
+            ctx.controls.update();
+
+            ctx.scene.add(mesh);
+            ctx.mesh = mesh;
+        }
+
+        return () => { cancelled = true; };
+    }, [stlOutputs, viewerMode, fileContent]);
 
     const inputStyle: React.CSSProperties = {
         background: '#2a2d35',
@@ -238,6 +289,18 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
         gap: 12,
         marginBottom: 5,
     };
+
+    const placeholderText = !fileContent
+        ? 'Select an SVG file to preview'
+        : viewerMode !== 'svg' && !stlOutputs
+            ? 'Generate STLs to view a preview'
+            : null;
+
+    const hintText = viewerMode === 'svg' && fileContent
+        ? 'Drag to pan · scroll to zoom'
+        : stlOutputs
+            ? 'Drag to rotate · scroll to zoom'
+            : null;
 
     return (
         <Page tabId={tabId} index={index}>
@@ -286,98 +349,48 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
                             <h3 style={{ color: '#ddd', marginBottom: 6 }}>Options</h3>
                             <div style={rowStyle}>
                                 <span style={labelStyle}>Board thickness (mm)</span>
-                                <input
-                                    type="number"
-                                    step="0.1"
-                                    value={options.boardThicknessMm}
-                                    onChange={e => handleOption('boardThicknessMm', parseFloat(e.target.value))}
-                                    style={inputStyle}
-                                />
+                                <input type="number" step="0.1" value={options.boardThicknessMm}
+                                    onChange={e => handleOption('boardThicknessMm', parseFloat(e.target.value))} style={inputStyle} />
                             </div>
                             <div style={rowStyle}>
                                 <span style={labelStyle}>Trace recess depth (mm)</span>
-                                <input
-                                    type="number"
-                                    step="0.05"
-                                    value={options.traceRecessMm}
-                                    onChange={e => handleOption('traceRecessMm', parseFloat(e.target.value))}
-                                    style={inputStyle}
-                                />
+                                <input type="number" step="0.05" value={options.traceRecessMm}
+                                    onChange={e => handleOption('traceRecessMm', parseFloat(e.target.value))} style={inputStyle} />
                             </div>
                             <div style={rowStyle}>
                                 <span style={labelStyle}>Trace clearance (mm)</span>
-                                <input
-                                    type="number"
-                                    step="0.05"
-                                    value={options.traceClearanceMm}
-                                    onChange={e => handleOption('traceClearanceMm', parseFloat(e.target.value))}
-                                    style={inputStyle}
-                                />
+                                <input type="number" step="0.05" value={options.traceClearanceMm}
+                                    onChange={e => handleOption('traceClearanceMm', parseFloat(e.target.value))} style={inputStyle} />
                             </div>
                             <div style={rowStyle}>
                                 <span style={labelStyle}>Bump chamfer (mm)</span>
-                                <input
-                                    type="number"
-                                    step="0.05"
-                                    min="0"
-                                    value={options.bumpChamferMm}
-                                    onChange={e => handleOption('bumpChamferMm', parseFloat(e.target.value))}
-                                    style={inputStyle}
-                                />
+                                <input type="number" step="0.05" min="0" value={options.bumpChamferMm}
+                                    onChange={e => handleOption('bumpChamferMm', parseFloat(e.target.value))} style={inputStyle} />
                             </div>
                             <div style={rowStyle}>
                                 <span style={labelStyle}>Press thickness (mm)</span>
-                                <input
-                                    type="number"
-                                    step="0.5"
-                                    value={options.pressThicknessMm}
-                                    onChange={e => handleOption('pressThicknessMm', parseFloat(e.target.value))}
-                                    style={inputStyle}
-                                />
+                                <input type="number" step="0.5" value={options.pressThicknessMm}
+                                    onChange={e => handleOption('pressThicknessMm', parseFloat(e.target.value))} style={inputStyle} />
                             </div>
                             <div style={rowStyle}>
                                 <span style={labelStyle}>Finger indent depth (mm)</span>
-                                <input
-                                    type="number"
-                                    step="1"
-                                    min="0"
-                                    value={options.fingerIndentMm}
-                                    onChange={e => handleOption('fingerIndentMm', parseFloat(e.target.value))}
-                                    style={inputStyle}
-                                />
+                                <input type="number" step="1" min="0" value={options.fingerIndentMm}
+                                    onChange={e => handleOption('fingerIndentMm', parseFloat(e.target.value))} style={inputStyle} />
                             </div>
                             <div style={rowStyle}>
                                 <span style={labelStyle}>Text relief (mm)</span>
-                                <input
-                                    type="number"
-                                    step="0.1"
-                                    min="0"
-                                    value={options.textReliefMm}
-                                    onChange={e => handleOption('textReliefMm', parseFloat(e.target.value))}
-                                    style={inputStyle}
-                                />
+                                <input type="number" step="0.1" min="0" value={options.textReliefMm}
+                                    onChange={e => handleOption('textReliefMm', parseFloat(e.target.value))} style={inputStyle} />
                             </div>
                             <div style={rowStyle}>
                                 <span style={labelStyle}>Drill diameter (mm)</span>
-                                <input
-                                    type="number"
-                                    step="0.05"
-                                    value={options.drillDiameterMm}
-                                    onChange={e => handleOption('drillDiameterMm', parseFloat(e.target.value))}
-                                    style={inputStyle}
-                                />
+                                <input type="number" step="0.05" value={options.drillDiameterMm}
+                                    onChange={e => handleOption('drillDiameterMm', parseFloat(e.target.value))} style={inputStyle} />
                             </div>
                             <div style={rowStyle}>
                                 <span style={labelStyle}>Trace segments (circle quality)</span>
-                                <input
-                                    type="number"
-                                    step="4"
-                                    min="8"
-                                    max="64"
-                                    value={options.traceSegments}
-                                    onChange={e => handleOption('traceSegments', parseInt(e.target.value, 10))}
-                                    style={inputStyle}
-                                />
+                                <input type="number" step="4" min="8" max="64" value={options.traceSegments}
+                                    onChange={e => handleOption('traceSegments', parseInt(e.target.value, 10))} style={inputStyle} />
                             </div>
                         </section>
 
@@ -389,7 +402,7 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
                                 style={{
                                     padding: '10px 28px',
                                     background: fileContent && !generating ? '#03A550' : '#2a2d35',
-                                    color: '#fff',
+                                    color: fileContent && !generating ? '#fff' : '#555',
                                     border: 'none',
                                     borderRadius: 4,
                                     fontSize: 16,
@@ -402,7 +415,7 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
 
                         {/* Error */}
                         {error && (
-                            <section style={{ padding: 12, background: '#3a1515', borderRadius: 4 }}>
+                            <section style={{ marginTop: 10, padding: 12, background: '#3a1515', borderRadius: 4 }}>
                                 <strong style={{ color: '#f44' }}>Error:</strong>{' '}
                                 <span style={{ color: '#faa', fontSize: 14 }}>{error}</span>
                             </section>
@@ -412,10 +425,26 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
                     {/* Right column: preview fills space, downloads pin to bottom */}
                     <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
 
-                        {/* STL viewer — always visible */}
+                        {/* Viewer — always visible */}
                         <section style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                             <h3 style={{ color: '#ddd', marginBottom: 6 }}>Preview</h3>
                             <div style={{ display: 'flex', gap: 12, marginBottom: 8 }}>
+                                {/* SVG button */}
+                                <button
+                                    disabled={!fileContent}
+                                    onClick={() => setViewerMode('svg')}
+                                    style={{
+                                        padding: '4px 14px',
+                                        background: fileContent && viewerMode === 'svg' ? '#1a6b8a' : '#2a2d35',
+                                        color: fileContent ? '#fff' : '#555',
+                                        border: '1px solid #444',
+                                        borderRadius: 4,
+                                        cursor: fileContent ? 'pointer' : 'not-allowed',
+                                    }}
+                                >
+                                    SVG
+                                </button>
+                                {/* PCB button */}
                                 <button
                                     disabled={!stlOutputs}
                                     onClick={() => setViewerMode('pcb')}
@@ -430,6 +459,7 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
                                 >
                                     PCB
                                 </button>
+                                {/* Press button */}
                                 <button
                                     disabled={!stlOutputs}
                                     onClick={() => setViewerMode('press')}
@@ -456,7 +486,7 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
                                         border: '1px solid #333',
                                     }}
                                 />
-                                {!stlOutputs && (
+                                {placeholderText && (
                                     <div style={{
                                         position: 'absolute',
                                         inset: 0,
@@ -469,13 +499,13 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
                                         borderRadius: 4,
                                         border: '1px solid #333',
                                     }}>
-                                        Generate STLs to view a preview
+                                        {placeholderText}
                                     </div>
                                 )}
                             </div>
-                            {stlOutputs && (
+                            {hintText && (
                                 <p style={{ color: '#666', fontSize: 12, marginTop: 4 }}>
-                                    Drag to rotate · scroll to zoom
+                                    {hintText}
                                 </p>
                             )}
                         </section>
