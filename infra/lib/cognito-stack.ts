@@ -170,74 +170,52 @@ export class CognitoStack extends cdk.Stack {
                 components: {
                     pageBackground: {
                         image: { enabled: false },
-                        lightMode: { color: '1e1e1eff' },
-                        darkMode:  { color: '1e1e1eff' },
+                        darkMode: { color: '282c34ff' },
                     },
                     pageHeader: {
                         backgroundImage: { enabled: false },
                         logo: { location: 'START', enabled: false },
-                        lightMode: { background: { color: '181a1eff' }, borderColor: '333333ff' },
-                        darkMode:  { background: { color: '181a1eff' }, borderColor: '333333ff' },
+                        darkMode: { background: { color: '21252bff' }, borderColor: '3e4451ff' },
                     },
                     pageFooter: {
                         backgroundImage: { enabled: false },
                         logo: { location: 'START', enabled: false },
-                        lightMode: { background: { color: '181a1eff' }, borderColor: '333333ff' },
-                        darkMode:  { background: { color: '181a1eff' }, borderColor: '333333ff' },
+                        darkMode: { background: { color: '21252bff' }, borderColor: '3e4451ff' },
                     },
                     form: {
                         borderRadius: 8,
                         backgroundImage: { enabled: false },
                         logo: { location: 'CENTER', position: 'TOP', enabled: false, formInclusion: 'IN' },
-                        lightMode: { backgroundColor: '2a2d35ff', borderColor: '444444ff' },
-                        darkMode:  { backgroundColor: '2a2d35ff', borderColor: '444444ff' },
+                        darkMode: { backgroundColor: '2c313aff', borderColor: '3e4451ff' },
                     },
                     pageText: {
-                        lightMode: { bodyColor: 'ccccccff', headingColor: 'ffffffff', descriptionColor: '888888ff' },
-                        darkMode:  { bodyColor: 'ccccccff', headingColor: 'ffffffff', descriptionColor: '888888ff' },
+                        darkMode: { bodyColor: 'abb2bfff', headingColor: 'ffffffff', descriptionColor: '5c6370ff' },
                     },
                     primaryButton: {
-                        lightMode: {
-                            defaults: { backgroundColor: '03a550ff', textColor: 'ffffffff' },
-                            hover:    { backgroundColor: '029040ff', textColor: 'ffffffff' },
-                            active:   { backgroundColor: '027530ff', textColor: 'ffffffff' },
-                            disabled: { backgroundColor: '2a2d35ff', borderColor: '555555ff' },
-                        },
                         darkMode: {
-                            defaults: { backgroundColor: '03a550ff', textColor: 'ffffffff' },
-                            hover:    { backgroundColor: '029040ff', textColor: 'ffffffff' },
-                            active:   { backgroundColor: '027530ff', textColor: 'ffffffff' },
-                            disabled: { backgroundColor: '2a2d35ff', borderColor: '555555ff' },
+                            defaults: { backgroundColor: '2563ebff', textColor: 'ffffffff' },
+                            hover:    { backgroundColor: '1d4ed8ff', textColor: 'ffffffff' },
+                            active:   { backgroundColor: '1e40afff', textColor: 'ffffffff' },
+                            disabled: { backgroundColor: '2c313aff', borderColor: '3e4451ff' },
                         },
                     },
                     secondaryButton: {
-                        lightMode: {
-                            defaults: { backgroundColor: '2a2d35ff', borderColor: '444444ff', textColor: 'ccccccff' },
-                            hover:    { backgroundColor: '333740ff', borderColor: '666666ff', textColor: 'ffffffff' },
-                            active:   { backgroundColor: '1e2028ff', borderColor: '444444ff', textColor: 'ffffffff' },
-                        },
                         darkMode: {
-                            defaults: { backgroundColor: '2a2d35ff', borderColor: '444444ff', textColor: 'ccccccff' },
-                            hover:    { backgroundColor: '333740ff', borderColor: '666666ff', textColor: 'ffffffff' },
-                            active:   { backgroundColor: '1e2028ff', borderColor: '444444ff', textColor: 'ffffffff' },
+                            defaults: { backgroundColor: '2c313aff', borderColor: '3e4451ff', textColor: 'abb2bfff' },
+                            hover:    { backgroundColor: '353b45ff', borderColor: '528bffff', textColor: 'ffffffff' },
+                            active:   { backgroundColor: '21252bff', borderColor: '3e4451ff', textColor: 'ffffffff' },
                         },
                     },
                     alert: {
                         borderRadius: 4,
-                        lightMode: { error: { backgroundColor: '3a1515ff', borderColor: 'f44444ff' } },
-                        darkMode:  { error: { backgroundColor: '3a1515ff', borderColor: 'f44444ff' } },
+                        darkMode: { error: { backgroundColor: '3a1515ff', borderColor: 'e06c75ff' } },
                     },
                     idpButton: {
                         standard: {
-                            lightMode: {
-                                defaults: { backgroundColor: '2a2d35ff', borderColor: '444444ff', textColor: 'ccccccff' },
-                                hover:    { backgroundColor: '333740ff', borderColor: '666666ff', textColor: 'ffffffff' },
-                                active:   { backgroundColor: '1e2028ff', borderColor: '444444ff', textColor: 'ffffffff' },
-                            },
                             darkMode: {
-                                defaults: { backgroundColor: '2a2d35ff', borderColor: '444444ff', textColor: 'ccccccff' },
-                                hover:    { backgroundColor: '333740ff', borderColor: '666666ff', textColor: 'ffffffff' },
-                                active:   { backgroundColor: '1e2028ff', borderColor: '444444ff', textColor: 'ffffffff' },
+                                defaults: { backgroundColor: '2c313aff', borderColor: '3e4451ff', textColor: 'abb2bfff' },
+                                hover:    { backgroundColor: '353b45ff', borderColor: '528bffff', textColor: 'ffffffff' },
+                                active:   { backgroundColor: '21252bff', borderColor: '3e4451ff', textColor: 'ffffffff' },
                             },
                         },
                         custom: {},
@@ -248,40 +226,36 @@ export class CognitoStack extends cdk.Stack {
                 componentClasses: {
                     input: {
                         borderRadius: 6,
-                        lightMode: {
-                            defaults: { backgroundColor: '1e2028ff', borderColor: '555555ff' },
-                            placeholderColor: '666666ff',
-                        },
                         darkMode: {
-                            defaults: { backgroundColor: '1e2028ff', borderColor: '555555ff' },
-                            placeholderColor: '666666ff',
+                            defaults: { backgroundColor: '21252bff', borderColor: '3e4451ff' },
+                            placeholderColor: '5c6370ff',
                         },
                     },
                     inputLabel: {
-                        lightMode: { textColor: 'ccccccff' },
-                        darkMode:  { textColor: 'ccccccff' },
+                        darkMode: { textColor: 'abb2bfff' },
                     },
                     inputDescription: {
-                        lightMode: { textColor: '888888ff' },
-                        darkMode:  { textColor: '888888ff' },
+                        darkMode: { textColor: '5c6370ff' },
                     },
                     link: {
-                        lightMode: { defaults: { textColor: '03a550ff' }, hover: { textColor: '029040ff' } },
-                        darkMode:  { defaults: { textColor: '03a550ff' }, hover: { textColor: '029040ff' } },
+                        darkMode: { defaults: { textColor: '61afefff' }, hover: { textColor: '528bffff' } },
                     },
                     optionControls: {
-                        lightMode: {
-                            defaults: { backgroundColor: '1e2028ff', borderColor: '555555ff' },
-                            selected: { backgroundColor: '03a550ff', foregroundColor: 'ffffffff' },
-                        },
                         darkMode: {
-                            defaults: { backgroundColor: '1e2028ff', borderColor: '555555ff' },
-                            selected: { backgroundColor: '03a550ff', foregroundColor: 'ffffffff' },
+                            defaults: { backgroundColor: '21252bff', borderColor: '3e4451ff' },
+                            selected: { backgroundColor: '2563ebff', foregroundColor: 'ffffffff' },
                         },
                     },
                     focusState: {
-                        lightMode: { borderColor: '03a550ff' },
-                        darkMode:  { borderColor: '03a550ff' },
+                        darkMode: { borderColor: '528bffff' },
+                    },
+                },
+                categories: {
+                    global: {
+                        colorSchemeMode: 'DARK',
+                        pageFooter: { enabled: false },
+                        pageHeader: { enabled: false },
+                        spacingDensity: 'REGULAR',
                     },
                 },
             },
