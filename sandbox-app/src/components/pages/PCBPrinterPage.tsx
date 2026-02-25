@@ -60,6 +60,63 @@ function resolveVersion(svgContent: string, version: string): string {
     return svgContent.replace(/\{version\}/g, version);
 }
 
+// ── Design tokens (slate/grey, site-matching) ─────────────────────────────────
+const C = {
+    ctrl:        '#2a2d35',
+    input:       '#1e2028',
+    border:      '#3a3f4b',
+    borderSubtle:'#2e3240',
+    accent:      '#03A550',
+    accentPress: '#2244aa',
+    accentSave:  '#2563eb',
+    text:        '#ccc',
+    muted:       '#888',
+    dim:         '#555',
+    errorBg:     '#3a1515',
+    errorBorder: '#5a2020',
+};
+
+const INJECTED_CSS = `
+  .pcb-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 2px;
+    background: ${C.border};
+    outline: none;
+    cursor: pointer;
+    border-radius: 1px;
+    display: block;
+  }
+  .pcb-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 12px;
+    height: 12px;
+    background: ${C.accent};
+    cursor: pointer;
+    border-radius: 3px;
+    border: none;
+  }
+  .pcb-slider::-moz-range-thumb {
+    width: 12px;
+    height: 12px;
+    background: ${C.accent};
+    cursor: pointer;
+    border-radius: 3px;
+    border: none;
+    box-sizing: border-box;
+  }
+  .pcb-btn { transition: filter 0.12s; }
+  .pcb-btn:hover:not(:disabled) { filter: brightness(1.15); }
+  .pcb-row:hover td { background: ${C.ctrl} !important; }
+  @keyframes pcb-toast-in {
+    from { opacity: 0; transform: translateY(-6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+`;
+
+// ── Component ─────────────────────────────────────────────────────────────────
 const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index, creds }) => {
     const [fileName, setFileName] = useState<string | null>(null);
     const [fileContent, setFileContent] = useState<string | null>(null);
@@ -70,9 +127,14 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index, creds }) => {
     const [error, setError] = useState<string | null>(null);
     const [viewerMode, setViewerMode] = useState<ViewerMode>('svg');
 
+    // Dynamic slider maxes and expand animation
+    const [sliderMaxes, setSliderMaxes] = useState<Partial<Record<keyof UIOptions, number>>>({});
+    const [expandingSlider, setExpandingSlider] = useState<keyof UIOptions | null>(null);
+
     // Save/Load state
     const [saving, setSaving] = useState(false);
     const [saveError, setSaveError] = useState<string | null>(null);
+    const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
     const [loadOpen, setLoadOpen] = useState(false);
     const [savedRecords, setSavedRecords] = useState<PcbSaveRecord[] | null>(null);
     const [loadingRecords, setLoadingRecords] = useState(false);
@@ -87,6 +149,13 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index, creds }) => {
         mesh: THREE.Mesh | null;
         animFrame: number;
     } | null>(null);
+
+    // Auto-dismiss save success toast
+    useEffect(() => {
+        if (!saveSuccess) return;
+        const t = setTimeout(() => setSaveSuccess(null), 3000);
+        return () => clearTimeout(t);
+    }, [saveSuccess]);
 
     // Auto-switch to SVG preview when a file is loaded
     useEffect(() => {
@@ -148,16 +217,13 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index, creds }) => {
             const bucket = Config.pcbPrinter.bucket;
             const baseName = fileName.replace(/\.svg$/i, '');
 
-            // Hash original SVG to determine versioning
             const svgHash = await hashBuffer(fileContent);
             const { major, minor } = await getVersionNumbers(baseName, svgHash, creds);
             const version = `${major}.${minor}`;
 
-            // Substitute {version} and re-run build with versioned SVG
             const versionedSvg = resolveVersion(fileContent, version);
             const versionedOutputs = await runBuild(versionedSvg, options);
 
-            // Hash the three artefacts
             const [svgStoreHash, pcbHash, pressHash] = await Promise.all([
                 hashBuffer(versionedSvg),
                 hashBuffer(versionedOutputs.pcb),
@@ -192,9 +258,8 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index, creds }) => {
             };
 
             await saveRecord(record, creds);
-
-            // Update viewer to show the versioned STLs
             setStlOutputs(versionedOutputs);
+            setSaveSuccess(`Saved v${version}`);
         } catch (err) {
             setSaveError(String(err));
         } finally {
@@ -225,7 +290,6 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index, creds }) => {
                 downloadFromS3(bucket, record.pcbStlKey, creds),
                 downloadFromS3(bucket, record.pressStlKey, creds),
             ]);
-            // Trigger SVG file download (so user's file input reflects the loaded file)
             const svgText = new TextDecoder().decode(svgBuf);
             setFileName(record.filename + '.svg');
             setFileContent(svgText);
@@ -233,7 +297,6 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index, creds }) => {
             setStlOutputs({ pcb: pcbBuf, press: pressBuf });
             setViewerMode('pcb');
 
-            // Download all three files to disk
             const downloads: [ArrayBuffer, string, string][] = [
                 [svgBuf, record.filename + '.svg', 'image/svg+xml'],
                 [pcbBuf, record.filename + '-pcb.stl', 'model/stl'],
@@ -318,7 +381,6 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index, creds }) => {
         if (!ctx) return;
         let cancelled = false;
 
-        // Clear existing mesh and dispose its resources
         if (ctx.mesh) {
             ctx.scene.remove(ctx.mesh);
             ctx.mesh.geometry.dispose();
@@ -328,7 +390,6 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index, creds }) => {
             ctx.mesh = null;
         }
 
-        // Resize renderer to actual container dimensions
         const container = canvasRef.current;
         if (container) {
             const w = container.clientWidth || 720;
@@ -339,7 +400,6 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index, creds }) => {
         }
 
         if (viewerMode === 'svg' && fileContent) {
-            // Parse aspect ratio from SVG width/height or viewBox
             const parser = new DOMParser();
             const svgDoc = parser.parseFromString(fileContent, 'image/svg+xml');
             const svgEl = svgDoc.documentElement;
@@ -360,12 +420,10 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index, creds }) => {
                 const mat = new THREE.MeshBasicMaterial({ map: texture, side: THREE.DoubleSide });
                 const mesh = new THREE.Mesh(geo, mat);
 
-                // Camera faces the XY plane from +Z; Y-up for natural SVG orientation
                 ctx.camera.up.set(0, 1, 0);
                 ctx.camera.position.set(0, 0, planeH * 1.5);
                 ctx.camera.lookAt(0, 0, 0);
                 ctx.controls.target.set(0, 0, 0);
-                // Pan + zoom only for flat SVG; rotation is confusing for a 2D image
                 ctx.controls.enableRotate = false;
                 ctx.controls.saveState();
                 ctx.controls.update();
@@ -397,7 +455,6 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index, creds }) => {
             box.getSize(size);
             const maxDim = Math.max(size.x, size.y, size.z);
 
-            // Restore Z-up for 3D STL viewing
             ctx.camera.up.set(0, 0, 1);
             ctx.camera.position.set(0, -maxDim * 1.8, maxDim * 1.2);
             ctx.camera.lookAt(0, 0, 0);
@@ -413,31 +470,67 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index, creds }) => {
         return () => { cancelled = true; };
     }, [stlOutputs, viewerMode, fileContent]);
 
-    const inputStyle: React.CSSProperties = {
-        background: '#2a2d35',
-        border: '1px solid #444',
-        borderRadius: 4,
-        color: '#ccc',
-        padding: '4px 8px',
-        width: 100,
-    };
-    const labelStyle: React.CSSProperties = {
-        color: '#aaa',
-        fontSize: 14,
-        minWidth: 200,
-        display: 'inline-block',
-    };
-    const rowStyle: React.CSSProperties = {
-        display: 'flex',
-        alignItems: 'center',
-        gap: 12,
-        marginBottom: 5,
+    // ── Slider helper ─────────────────────────────────────────────────────────
+    const renderSlider = (
+        key: keyof UIOptions,
+        label: string,
+        min: number,
+        defaultMax: number,
+        step: number,
+        unit = 'mm',
+        hardMax?: number,
+    ) => {
+        const val = options[key] as number;
+        const currentMax = sliderMaxes[key] ?? defaultMax;
+        const isExpanding = expandingSlider === key;
+        const decimals = unit === '' ? 0 : step < 0.1 ? 2 : step < 1 ? 1 : 0;
+        const displayVal = val.toFixed(decimals) + unit;
+        return (
+            <div key={key} style={{ marginBottom: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                    <span style={{ color: '#aaa', fontSize: 13 }}>{label}</span>
+                    <span style={{ color: '#ccc', fontSize: 13, minWidth: 48, textAlign: 'right' }}>{displayVal}</span>
+                </div>
+                <div style={{
+                    position: 'relative',
+                    zIndex: isExpanding ? 50 : undefined,
+                    transform: isExpanding ? 'scale(2, 2)' : 'scale(1, 1)',
+                    transformOrigin: 'left center',
+                    transition: 'transform 0.25s ease',
+                }}>
+                    <input
+                        type="range"
+                        className="pcb-slider"
+                        min={min}
+                        max={currentMax}
+                        step={step}
+                        value={val}
+                        onChange={e => {
+                            const num = unit === '' ? parseInt(e.target.value, 10) : parseFloat(e.target.value);
+                            setOptions(prev => ({ ...prev, [key]: num }));
+                        }}
+                        onPointerUp={e => {
+                            const released = parseFloat((e.target as HTMLInputElement).value);
+                            if (released < currentMax) return;
+                            if (hardMax !== undefined && currentMax >= hardMax) return;
+                            const newMax = hardMax !== undefined
+                                ? Math.min(currentMax * 2, hardMax)
+                                : currentMax * 2;
+                            setSliderMaxes(prev => ({ ...prev, [key]: newMax }));
+                            setExpandingSlider(key);
+                            setTimeout(() => setExpandingSlider(null), 350);
+                        }}
+                    />
+                </div>
+            </div>
+        );
     };
 
+    // ── Derived display values ────────────────────────────────────────────────
     const placeholderText = !fileContent
         ? 'Select an SVG file to preview'
         : viewerMode !== 'svg' && !stlOutputs
-            ? 'Generate STLs to view a preview'
+            ? 'Generate STLs to view a 3D preview'
             : null;
 
     const hintText = viewerMode === 'svg' && fileContent
@@ -446,23 +539,26 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index, creds }) => {
             ? 'Drag to rotate · scroll to zoom'
             : null;
 
+    // ── Shared button styles ──────────────────────────────────────────────────
     const btnBase: React.CSSProperties = {
         padding: '10px 20px',
         border: 'none',
         borderRadius: 4,
-        fontSize: 16,
+        fontSize: 15,
+        cursor: 'pointer',
     };
 
+    // ── Render ────────────────────────────────────────────────────────────────
     return (
         <Page tabId={tabId} index={index}>
-            <div className="page" style={{ color: '#ccc', padding: '8px 32px 16px' }}>
-                {/* Header row */}
+            <style>{INJECTED_CSS}</style>
+            <div style={{ color: '#ccc', padding: '8px 32px 16px' }}>
+
+                {/* Header */}
                 <div style={{ marginBottom: 6 }}>
                     <h1 style={{ color: '#fff', margin: 0 }}>PCB Printer</h1>
                 </div>
-                <p style={{ color: '#888', marginBottom: 10, fontSize: 14 }}>
-                    Export your PCB from Fritzing via <em>File → Export → as Image → SVG…</em>
-                </p>
+                <h3 style={{ color: '#888', marginTop: 0, marginBottom: 14, fontWeight: 'normal' }}>Fritzing SVG to 3D-printable STL</h3>
 
                 {/* Two-column layout */}
                 <div style={{ display: 'flex', gap: 32, alignItems: 'stretch' }}>
@@ -471,95 +567,60 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index, creds }) => {
                     <div style={{ flex: '0 0 360px', display: 'flex', flexDirection: 'column' }}>
 
                         {/* File upload */}
-                        <section style={{ marginBottom: 10 }}>
-                            <h3 style={{ color: '#ddd', marginBottom: 6 }}>Input file</h3>
-                            <label
-                                style={{
+                        <section style={{ marginBottom: 14 }}>
+                            <h3 style={{ color: '#ddd', marginBottom: 8 }}>Input file</h3>
+                            <label style={{ cursor: 'pointer', display: 'block' }}>
+                                <input type="file" accept=".svg" style={{ display: 'none' }} onChange={handleFileChange} />
+                                <div style={{
                                     display: 'inline-flex',
                                     alignItems: 'center',
-                                    gap: 8,
-                                    cursor: 'pointer',
-                                    padding: '4px 10px',
-                                    background: '#2a2d35',
-                                    border: '1px solid #444',
+                                    gap: 10,
+                                    padding: '6px 14px',
+                                    background: C.ctrl,
+                                    border: `1px solid ${C.border}`,
                                     borderRadius: 4,
-                                }}
-                            >
-                                <input
-                                    type="file"
-                                    accept=".svg"
-                                    style={{ display: 'none' }}
-                                    onChange={handleFileChange}
-                                />
-                                <span style={{ color: '#aaa', fontSize: 13 }}>Choose SVG file</span>
+                                }}>
+                                    <span style={{ color: '#aaa', fontSize: 14 }}>Choose SVG file</span>
+                                </div>
                             </label>
                             {fileName && (
-                                <span style={{ marginLeft: 12, color: '#4fc3f7', fontSize: 13 }}>{fileName}</span>
+                                <span style={{ marginLeft: 12, color: '#4fc3f7', fontSize: 14 }}>{fileName}</span>
                             )}
                         </section>
 
-                        {/* Options form */}
-                        <section style={{ flex: 1, marginBottom: 10 }}>
-                            <h3 style={{ color: '#ddd', marginBottom: 6 }}>Options</h3>
-                            <div style={rowStyle}>
-                                <span style={labelStyle}>Board thickness (mm)</span>
-                                <input type="number" step="0.1" value={options.boardThicknessMm}
-                                    onChange={e => handleOption('boardThicknessMm', parseFloat(e.target.value))} style={inputStyle} />
-                            </div>
-                            <div style={rowStyle}>
-                                <span style={labelStyle}>Trace recess depth (mm)</span>
-                                <input type="number" step="0.05" value={options.traceRecessMm}
-                                    onChange={e => handleOption('traceRecessMm', parseFloat(e.target.value))} style={inputStyle} />
-                            </div>
-                            <div style={rowStyle}>
-                                <span style={labelStyle}>Trace clearance (mm)</span>
-                                <input type="number" step="0.05" value={options.traceClearanceMm}
-                                    onChange={e => handleOption('traceClearanceMm', parseFloat(e.target.value))} style={inputStyle} />
-                            </div>
-                            <div style={rowStyle}>
-                                <span style={labelStyle}>Bump chamfer (mm)</span>
-                                <input type="number" step="0.05" min="0" value={options.bumpChamferMm}
-                                    onChange={e => handleOption('bumpChamferMm', parseFloat(e.target.value))} style={inputStyle} />
-                            </div>
-                            <div style={rowStyle}>
-                                <span style={labelStyle}>Press thickness (mm)</span>
-                                <input type="number" step="0.5" value={options.pressThicknessMm}
-                                    onChange={e => handleOption('pressThicknessMm', parseFloat(e.target.value))} style={inputStyle} />
-                            </div>
-                            <div style={rowStyle}>
-                                <span style={labelStyle}>Finger indent depth (mm)</span>
-                                <input type="number" step="1" min="0" value={options.fingerIndentMm}
-                                    onChange={e => handleOption('fingerIndentMm', parseFloat(e.target.value))} style={inputStyle} />
-                            </div>
-                            <div style={rowStyle}>
-                                <span style={labelStyle}>Text relief (mm)</span>
-                                <input type="number" step="0.1" min="0" value={options.textReliefMm}
-                                    onChange={e => handleOption('textReliefMm', parseFloat(e.target.value))} style={inputStyle} />
-                            </div>
-                            <div style={rowStyle}>
-                                <span style={labelStyle}>Drill diameter (mm)</span>
-                                <input type="number" step="0.05" value={options.drillDiameterMm}
-                                    onChange={e => handleOption('drillDiameterMm', parseFloat(e.target.value))} style={inputStyle} />
-                            </div>
-                            <div style={rowStyle}>
-                                <span style={labelStyle}>Trace segments (circle quality)</span>
-                                <input type="number" step="4" min="8" max="64" value={options.traceSegments}
-                                    onChange={e => handleOption('traceSegments', parseInt(e.target.value, 10))} style={inputStyle} />
-                            </div>
+                        {/* Options */}
+                        <section style={{ flex: 1, marginBottom: 14 }}>
+                            <h3 style={{ color: '#ddd', marginBottom: 10 }}>Options</h3>
+
+                            <div style={{ color: '#666', fontSize: 12, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Board</div>
+                            {renderSlider('boardThicknessMm', 'Board thickness', 0.5, 5.0, 0.1)}
+                            {renderSlider('bumpChamferMm', 'Bump chamfer', 0, 1.0, 0.05)}
+
+                            <div style={{ color: '#666', fontSize: 12, marginTop: 14, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Traces</div>
+                            {renderSlider('traceRecessMm', 'Recess depth', 0, 1.0, 0.05)}
+                            {renderSlider('traceClearanceMm', 'Clearance', 0, 0.5, 0.05)}
+                            {renderSlider('drillDiameterMm', 'Drill diameter', 0.3, 3.0, 0.05)}
+
+                            <div style={{ color: '#666', fontSize: 12, marginTop: 14, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Press</div>
+                            {renderSlider('pressThicknessMm', 'Thickness', 1, 20, 0.5)}
+                            {renderSlider('fingerIndentMm', 'Finger indent', 0, 20, 1)}
+
+                            <div style={{ color: '#666', fontSize: 12, marginTop: 14, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.08em' }}>Output</div>
+                            {renderSlider('textReliefMm', 'Text relief', 0, 2.0, 0.1)}
+                            {renderSlider('traceSegments', 'Segments (circle quality)', 8, 64, 4, '', 64)}
                         </section>
 
-                        {/* Generate button */}
+                        {/* Generate */}
                         <section style={{ marginBottom: 0 }}>
                             <button
                                 onClick={generate}
                                 disabled={!fileContent || generating}
+                                className="pcb-btn"
                                 style={{
+                                    ...btnBase,
                                     padding: '10px 28px',
-                                    background: fileContent && !generating ? '#03A550' : '#2a2d35',
-                                    color: fileContent && !generating ? '#fff' : '#555',
-                                    border: 'none',
-                                    borderRadius: 4,
-                                    fontSize: 16,
+                                    background: fileContent && !generating ? C.accent : C.ctrl,
+                                    color: fileContent && !generating ? '#fff' : C.dim,
                                     cursor: fileContent && !generating ? 'pointer' : 'not-allowed',
                                 }}
                             >
@@ -567,119 +628,102 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index, creds }) => {
                             </button>
                         </section>
 
-                        {/* Error */}
-                        {error && (
-                            <section style={{ marginTop: 10, padding: 12, background: '#3a1515', borderRadius: 4 }}>
-                                <strong style={{ color: '#f44' }}>Error:</strong>{' '}
-                                <span style={{ color: '#faa', fontSize: 14 }}>{error}</span>
-                            </section>
-                        )}
-                        {saveError && (
-                            <section style={{ marginTop: 10, padding: 12, background: '#3a1515', borderRadius: 4 }}>
-                                <strong style={{ color: '#f44' }}>Save error:</strong>{' '}
-                                <span style={{ color: '#faa', fontSize: 14 }}>{saveError}</span>
+                        {/* Errors */}
+                        {(error || saveError) && (
+                            <section style={{ marginTop: 10, padding: 12, background: C.errorBg, borderRadius: 4 }}>
+                                <strong style={{ color: '#f44' }}>{saveError ? 'Save error:' : 'Error:'}</strong>{' '}
+                                <span style={{ color: '#faa', fontSize: 14 }}>{saveError || error}</span>
                             </section>
                         )}
                     </div>
 
-                    {/* Right column: preview fills space, downloads pin to bottom */}
+                    {/* Right column: preview + all actions */}
                     <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
 
-                        {/* Viewer — always visible */}
+                        {/* Viewer */}
                         <section style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-                            <h3 style={{ color: '#ddd', marginBottom: 6 }}>Preview</h3>
-                            <div style={{ display: 'flex', gap: 12, marginBottom: 8 }}>
-                                {/* SVG button */}
-                                <button
-                                    disabled={!fileContent}
-                                    onClick={() => setViewerMode('svg')}
-                                    style={{
-                                        padding: '4px 14px',
-                                        background: fileContent && viewerMode === 'svg' ? '#1a6b8a' : '#2a2d35',
-                                        color: fileContent ? '#fff' : '#555',
-                                        border: '1px solid #444',
-                                        borderRadius: 4,
-                                        cursor: fileContent ? 'pointer' : 'not-allowed',
-                                    }}
-                                >
-                                    SVG
-                                </button>
-                                {/* PCB button */}
-                                <button
-                                    disabled={!stlOutputs}
-                                    onClick={() => setViewerMode('pcb')}
-                                    style={{
-                                        padding: '4px 14px',
-                                        background: stlOutputs && viewerMode === 'pcb' ? '#03A550' : '#2a2d35',
-                                        color: stlOutputs ? '#fff' : '#555',
-                                        border: '1px solid #444',
-                                        borderRadius: 4,
-                                        cursor: stlOutputs ? 'pointer' : 'not-allowed',
-                                    }}
-                                >
-                                    PCB
-                                </button>
-                                {/* Press button */}
-                                <button
-                                    disabled={!stlOutputs}
-                                    onClick={() => setViewerMode('press')}
-                                    style={{
-                                        padding: '4px 14px',
-                                        background: stlOutputs && viewerMode === 'press' ? '#2244aa' : '#2a2d35',
-                                        color: stlOutputs ? '#fff' : '#555',
-                                        border: '1px solid #444',
-                                        borderRadius: 4,
-                                        cursor: stlOutputs ? 'pointer' : 'not-allowed',
-                                    }}
-                                >
-                                    Press
-                                </button>
+                            <h3 style={{ color: '#ddd', marginBottom: 8 }}>Preview</h3>
+
+                            {/* View mode tabs */}
+                            <div style={{ display: 'flex', gap: 2, marginBottom: 0 }}>
+                                {([
+                                    { mode: 'svg' as const,   label: 'SVG',   enabled: !!fileContent, color: '#1a6b8a' },
+                                    { mode: 'pcb' as const,   label: 'PCB',   enabled: !!stlOutputs,  color: C.accent },
+                                    { mode: 'press' as const, label: 'Press', enabled: !!stlOutputs,  color: C.accentPress },
+                                ]).map(({ mode, label, enabled, color }) => {
+                                    const active = viewerMode === mode && enabled;
+                                    return (
+                                        <button
+                                            key={mode}
+                                            disabled={!enabled}
+                                            onClick={() => setViewerMode(mode)}
+                                            className="pcb-btn"
+                                            style={{
+                                                padding: '5px 16px',
+                                                background: active ? color : C.ctrl,
+                                                color: !enabled ? C.dim : active ? '#fff' : '#aaa',
+                                                border: `1px solid ${active ? color : C.border}`,
+                                                borderBottom: active ? `1px solid ${color}` : `1px solid ${C.border}`,
+                                                borderRadius: '4px 4px 0 0',
+                                                fontSize: 14,
+                                                cursor: enabled ? 'pointer' : 'not-allowed',
+                                                position: 'relative',
+                                                bottom: -1,
+                                            }}
+                                        >
+                                            {label}
+                                        </button>
+                                    );
+                                })}
                             </div>
-                            <div style={{ flex: 1, position: 'relative', minHeight: 200 }}>
+
+                            {/* Canvas */}
+                            <div style={{ flex: 1, position: 'relative', minHeight: 320 }}>
                                 <div
                                     ref={canvasRef}
                                     style={{
                                         position: 'absolute',
                                         inset: 0,
-                                        borderRadius: 4,
+                                        borderRadius: '0 4px 4px 4px',
                                         overflow: 'hidden',
-                                        border: '1px solid #333',
+                                        border: `1px solid ${C.border}`,
                                     }}
                                 />
                                 {placeholderText && (
                                     <div style={{
-                                        position: 'absolute',
-                                        inset: 0,
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        color: '#555',
-                                        fontSize: 14,
+                                        position: 'absolute', inset: 0,
+                                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                        color: C.dim, fontSize: 14,
                                         pointerEvents: 'none',
-                                        borderRadius: 4,
-                                        border: '1px solid #333',
+                                        borderRadius: '0 4px 4px 4px',
+                                        border: `1px solid ${C.border}`,
                                     }}>
                                         {placeholderText}
                                     </div>
                                 )}
+                                {hintText && (
+                                    <p style={{
+                                        position: 'absolute', bottom: 8, right: 12,
+                                        color: C.dim, fontSize: 12,
+                                        margin: 0, pointerEvents: 'none',
+                                    }}>
+                                        {hintText}
+                                    </p>
+                                )}
                             </div>
-                            {hintText && (
-                                <p style={{ color: '#666', fontSize: 12, marginTop: 4 }}>
-                                    {hintText}
-                                </p>
-                            )}
                         </section>
 
-                        {/* Downloads — pinned to bottom of right column, inline with Generate */}
+                        {/* All action buttons in one row, with a divider between local and cloud */}
                         <section style={{ paddingTop: 12 }}>
-                            <div style={{ display: 'flex', gap: 10 }}>
+                            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                                 <button
                                     disabled={!stlOutputs}
                                     onClick={() => stlOutputs && downloadStl(stlOutputs.pcb, (fileName ?? 'pcb') + '-pcb.stl')}
+                                    className="pcb-btn"
                                     style={{
                                         ...btnBase,
-                                        background: stlOutputs ? '#03A550' : '#2a2d35',
-                                        color: stlOutputs ? '#fff' : '#555',
+                                        background: stlOutputs ? C.accent : C.ctrl,
+                                        color: stlOutputs ? '#fff' : C.dim,
                                         cursor: stlOutputs ? 'pointer' : 'not-allowed',
                                     }}
                                 >
@@ -688,22 +732,28 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index, creds }) => {
                                 <button
                                     disabled={!stlOutputs}
                                     onClick={() => stlOutputs && downloadStl(stlOutputs.press, (fileName ?? 'pcb') + '-press.stl')}
+                                    className="pcb-btn"
                                     style={{
                                         ...btnBase,
-                                        background: stlOutputs ? '#2244aa' : '#2a2d35',
-                                        color: stlOutputs ? '#fff' : '#555',
+                                        background: stlOutputs ? C.accentPress : C.ctrl,
+                                        color: stlOutputs ? '#fff' : C.dim,
                                         cursor: stlOutputs ? 'pointer' : 'not-allowed',
                                     }}
                                 >
                                     Download Press
                                 </button>
+
+                                {/* Divider */}
+                                <div style={{ width: 1, height: 28, background: C.border, margin: '0 4px' }} />
+
                                 <button
                                     disabled={!stlOutputs || saving || !creds}
                                     onClick={handleSave}
+                                    className="pcb-btn"
                                     style={{
                                         ...btnBase,
-                                        background: stlOutputs && !saving && creds ? '#2563eb' : '#2a2d35',
-                                        color: stlOutputs && !saving && creds ? '#fff' : '#555',
+                                        background: stlOutputs && !saving && creds ? C.accentSave : C.ctrl,
+                                        color: stlOutputs && !saving && creds ? '#fff' : C.dim,
                                         cursor: stlOutputs && !saving && creds ? 'pointer' : 'not-allowed',
                                     }}
                                 >
@@ -712,10 +762,12 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index, creds }) => {
                                 <button
                                     disabled={!creds}
                                     onClick={handleLoad}
+                                    className="pcb-btn"
                                     style={{
                                         ...btnBase,
-                                        background: creds ? '#2a2d35' : '#2a2d35',
-                                        color: creds ? '#ccc' : '#555',
+                                        background: C.ctrl,
+                                        color: creds ? '#ccc' : C.dim,
+                                        border: `1px solid ${creds ? C.border : C.borderSubtle}`,
                                         cursor: creds ? 'pointer' : 'not-allowed',
                                     }}
                                 >
@@ -727,23 +779,35 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index, creds }) => {
                 </div>
             </div>
 
+            {/* Save success toast */}
+            {saveSuccess && (
+                <div style={{
+                    position: 'fixed', top: 20, right: 20, zIndex: 2000,
+                    background: '#0d2918',
+                    border: `1px solid ${C.accent}`,
+                    borderRadius: 4,
+                    padding: '10px 18px',
+                    fontSize: 14,
+                    color: C.accent,
+                    animation: 'pcb-toast-in 0.2s ease',
+                }}>
+                    ✓ {saveSuccess}
+                </div>
+            )}
+
             {/* Load modal */}
             {loadOpen && (
                 <div style={{
-                    position: 'fixed',
-                    inset: 0,
-                    zIndex: 1000,
-                    background: 'rgba(0,0,0,0.7)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
+                    position: 'fixed', inset: 0, zIndex: 1000,
+                    background: 'rgba(0,0,0,0.75)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
                 }}>
                     <div style={{
                         background: '#1e2028',
-                        border: '1px solid #444',
+                        border: `1px solid ${C.border}`,
                         borderRadius: 8,
                         padding: 24,
-                        width: 820,
+                        width: 860,
                         maxWidth: '90vw',
                         maxHeight: '80vh',
                         display: 'flex',
@@ -756,16 +820,14 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index, creds }) => {
                                 onClick={() => setLoadOpen(false)}
                                 style={{
                                     background: 'none',
-                                    border: '1px solid #555',
+                                    border: `1px solid ${C.border}`,
                                     borderRadius: 4,
                                     color: '#aaa',
                                     cursor: 'pointer',
                                     padding: '2px 10px',
                                     fontSize: 16,
                                 }}
-                            >
-                                ✕
-                            </button>
+                            >✕</button>
                         </div>
 
                         {loadingRecords && (
@@ -780,8 +842,16 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index, creds }) => {
                             <div style={{ overflowY: 'auto', flex: 1 }}>
                                 <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
                                     <thead>
-                                        <tr style={{ borderBottom: '1px solid #333' }}>
-                                            {['Filename', 'Version', 'Timestamp', 'Options', 'pcbprinter'].map(h => (
+                                        <tr style={{ borderBottom: `1px solid ${C.border}` }}>
+                                            {[
+                                                'Filename',
+                                                'Version',
+                                                'Saved',
+                                                'Thickness (mm)',
+                                                'Recess (mm)',
+                                                'Clearance (mm)',
+                                                'pcbprinter',
+                                            ].map(h => (
                                                 <th key={h} style={{ color: '#888', textAlign: 'left', padding: '6px 10px', fontWeight: 500 }}>{h}</th>
                                             ))}
                                         </tr>
@@ -790,21 +860,17 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index, creds }) => {
                                         {savedRecords.map(rec => (
                                             <tr
                                                 key={rec.id}
+                                                className="pcb-row"
                                                 onClick={() => handleLoadRecord(rec)}
-                                                style={{
-                                                    borderBottom: '1px solid #2a2d35',
-                                                    cursor: 'pointer',
-                                                }}
-                                                onMouseEnter={e => (e.currentTarget.style.background = '#2a2d35')}
-                                                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                                                style={{ borderBottom: `1px solid ${C.borderSubtle}`, cursor: 'pointer' }}
                                             >
                                                 <td style={{ color: '#4fc3f7', padding: '8px 10px' }}>{rec.filename}</td>
                                                 <td style={{ color: '#ccc', padding: '8px 10px' }}>{rec.majorVersion}.{rec.minorVersion}</td>
                                                 <td style={{ color: '#aaa', padding: '8px 10px' }}>{new Date(rec.timestamp).toLocaleString()}</td>
-                                                <td style={{ color: '#aaa', padding: '8px 10px', fontSize: 12 }}>
-                                                    t={rec.options.boardThicknessMm} r={rec.options.traceRecessMm} c={rec.options.traceClearanceMm}
-                                                </td>
-                                                <td style={{ color: '#888', padding: '8px 10px' }}>{rec.pcbprinterVersion}</td>
+                                                <td style={{ color: '#aaa', padding: '8px 10px' }}>{rec.options.boardThicknessMm}</td>
+                                                <td style={{ color: '#aaa', padding: '8px 10px' }}>{rec.options.traceRecessMm}</td>
+                                                <td style={{ color: '#aaa', padding: '8px 10px' }}>{rec.options.traceClearanceMm}</td>
+                                                <td style={{ color: '#666', padding: '8px 10px' }}>{rec.pcbprinterVersion}</td>
                                             </tr>
                                         ))}
                                     </tbody>
