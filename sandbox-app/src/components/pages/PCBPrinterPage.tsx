@@ -457,23 +457,8 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index, creds }) => {
         <Page tabId={tabId} index={index}>
             <div className="page" style={{ color: '#ccc', padding: '8px 32px 16px' }}>
                 {/* Header row */}
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                <div style={{ marginBottom: 6 }}>
                     <h1 style={{ color: '#fff', margin: 0 }}>PCB Printer</h1>
-                    <button
-                        onClick={handleLoad}
-                        disabled={!creds}
-                        style={{
-                            padding: '6px 16px',
-                            background: creds ? '#2a2d35' : '#1e1e1e',
-                            color: creds ? '#ccc' : '#444',
-                            border: '1px solid #444',
-                            borderRadius: 4,
-                            fontSize: 14,
-                            cursor: creds ? 'pointer' : 'not-allowed',
-                        }}
-                    >
-                        Load saved…
-                    </button>
                 </div>
                 <p style={{ color: '#888', marginBottom: 10, fontSize: 14 }}>
                     Export your PCB from Fritzing via <em>File → Export → as Image → SVG…</em>
@@ -723,6 +708,18 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index, creds }) => {
                                     }}
                                 >
                                     {saving ? 'Saving…' : 'Save'}
+                                </button>
+                                <button
+                                    disabled={!creds}
+                                    onClick={handleLoad}
+                                    style={{
+                                        ...btnBase,
+                                        background: creds ? '#2a2d35' : '#2a2d35',
+                                        color: creds ? '#ccc' : '#555',
+                                        cursor: creds ? 'pointer' : 'not-allowed',
+                                    }}
+                                >
+                                    Load
                                 </button>
                             </div>
                         </section>
