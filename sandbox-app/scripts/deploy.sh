@@ -56,6 +56,7 @@ echo "{ \"version\": \"$RELEASE_VERSION\" }" > "$VERSION_FILE"
 echo "Building sandbox-app..."
 cd "$APP_DIR"
 AWS_PROFILE=nakom.is-sandbox ./scripts/set-config.sh sandbox
+npm install
 npm run build
 
 # --- Commit and tag ---
