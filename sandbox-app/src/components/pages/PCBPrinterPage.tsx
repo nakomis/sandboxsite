@@ -417,90 +417,109 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
                     {/* Right column: preview fills space, downloads pin to bottom */}
                     <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
 
-                        {/* STL viewer — always in DOM so Three.js can init on mount */}
-                        <section style={{ flex: 1, display: stlOutputs ? 'flex' : 'none', flexDirection: 'column' }}>
+                        {/* STL viewer — always visible */}
+                        <section style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
                             <h3 style={{ color: '#ddd', marginBottom: 6 }}>Preview</h3>
                             <div style={{ display: 'flex', gap: 12, marginBottom: 8 }}>
                                 <button
+                                    disabled={!stlOutputs}
                                     onClick={() => setViewerMode('pcb')}
                                     style={{
                                         padding: '4px 14px',
-                                        background: viewerMode === 'pcb' ? '#03A550' : '#2a2d35',
-                                        color: '#fff',
+                                        background: stlOutputs && viewerMode === 'pcb' ? '#03A550' : '#2a2d35',
+                                        color: stlOutputs ? '#fff' : '#555',
                                         border: '1px solid #444',
                                         borderRadius: 4,
-                                        cursor: 'pointer',
+                                        cursor: stlOutputs ? 'pointer' : 'not-allowed',
                                     }}
                                 >
                                     PCB
                                 </button>
                                 <button
+                                    disabled={!stlOutputs}
                                     onClick={() => setViewerMode('press')}
                                     style={{
                                         padding: '4px 14px',
-                                        background: viewerMode === 'press' ? '#2244aa' : '#2a2d35',
-                                        color: '#fff',
+                                        background: stlOutputs && viewerMode === 'press' ? '#2244aa' : '#2a2d35',
+                                        color: stlOutputs ? '#fff' : '#555',
                                         border: '1px solid #444',
                                         borderRadius: 4,
-                                        cursor: 'pointer',
+                                        cursor: stlOutputs ? 'pointer' : 'not-allowed',
                                     }}
                                 >
                                     Press
                                 </button>
                             </div>
-                            <div
-                                ref={canvasRef}
-                                style={{
-                                    flex: 1,
-                                    minHeight: 200,
-                                    borderRadius: 4,
-                                    overflow: 'hidden',
-                                    border: '1px solid #333',
-                                }}
-                            />
-                            <p style={{ color: '#666', fontSize: 12, marginTop: 4 }}>
-                                Drag to rotate · scroll to zoom
-                            </p>
+                            <div style={{ flex: 1, position: 'relative', minHeight: 200 }}>
+                                <div
+                                    ref={canvasRef}
+                                    style={{
+                                        position: 'absolute',
+                                        inset: 0,
+                                        borderRadius: 4,
+                                        overflow: 'hidden',
+                                        border: '1px solid #333',
+                                    }}
+                                />
+                                {!stlOutputs && (
+                                    <div style={{
+                                        position: 'absolute',
+                                        inset: 0,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        color: '#555',
+                                        fontSize: 14,
+                                        pointerEvents: 'none',
+                                        borderRadius: 4,
+                                        border: '1px solid #333',
+                                    }}>
+                                        Generate STLs to view a preview
+                                    </div>
+                                )}
+                            </div>
+                            {stlOutputs && (
+                                <p style={{ color: '#666', fontSize: 12, marginTop: 4 }}>
+                                    Drag to rotate · scroll to zoom
+                                </p>
+                            )}
                         </section>
 
-                        {/* Spacer when no STLs yet, so downloads still pin to bottom */}
-                        {!stlOutputs && <div style={{ flex: 1 }} />}
-
                         {/* Downloads — pinned to bottom of right column, inline with Generate */}
-                        {stlOutputs && (
-                            <section style={{ paddingTop: 12 }}>
-                                <div style={{ display: 'flex', gap: 10 }}>
-                                    <button
-                                        onClick={() => downloadStl(stlOutputs.pcb, (fileName ?? 'pcb') + '-pcb.stl')}
-                                        style={{
-                                            padding: '10px 20px',
-                                            background: '#03A550',
-                                            color: '#fff',
-                                            border: 'none',
-                                            borderRadius: 4,
-                                            fontSize: 16,
-                                            cursor: 'pointer',
-                                        }}
-                                    >
-                                        Download PCB
-                                    </button>
-                                    <button
-                                        onClick={() => downloadStl(stlOutputs.press, (fileName ?? 'pcb') + '-press.stl')}
-                                        style={{
-                                            padding: '10px 20px',
-                                            background: '#2244aa',
-                                            color: '#fff',
-                                            border: 'none',
-                                            borderRadius: 4,
-                                            fontSize: 16,
-                                            cursor: 'pointer',
-                                        }}
-                                    >
-                                        Download Press
-                                    </button>
-                                </div>
-                            </section>
-                        )}
+                        <section style={{ paddingTop: 12 }}>
+                            <div style={{ display: 'flex', gap: 10 }}>
+                                <button
+                                    disabled={!stlOutputs}
+                                    onClick={() => stlOutputs && downloadStl(stlOutputs.pcb, (fileName ?? 'pcb') + '-pcb.stl')}
+                                    style={{
+                                        padding: '10px 20px',
+                                        background: stlOutputs ? '#03A550' : '#2a2d35',
+                                        color: stlOutputs ? '#fff' : '#555',
+                                        border: 'none',
+                                        borderRadius: 4,
+                                        fontSize: 16,
+                                        cursor: stlOutputs ? 'pointer' : 'not-allowed',
+                                    }}
+                                >
+                                    Download PCB
+                                </button>
+                                <button
+                                    disabled={!stlOutputs}
+                                    onClick={() => stlOutputs && downloadStl(stlOutputs.press, (fileName ?? 'pcb') + '-press.stl')}
+                                    style={{
+                                        padding: '10px 20px',
+                                        background: stlOutputs ? '#2244aa' : '#2a2d35',
+                                        color: stlOutputs ? '#fff' : '#555',
+                                        border: 'none',
+                                        borderRadius: 4,
+                                        fontSize: 16,
+                                        cursor: stlOutputs ? 'pointer' : 'not-allowed',
+                                    }}
+                                >
+                                    Download Press
+                                </button>
+                            </div>
+                        </section>
                     </div>
                 </div>
             </div>
