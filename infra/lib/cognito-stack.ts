@@ -242,44 +242,47 @@ export class CognitoStack extends cdk.Stack {
                         },
                         custom: {},
                     },
-                    inputField: {
+                    phoneNumberSelector: { displayType: 'TEXT' },
+                    favicon: { enabledTypes: ['ICO', 'SVG'] },
+                },
+                componentClasses: {
+                    input: {
+                        borderRadius: 6,
                         lightMode: {
-                            backgroundColor: '1e2028ff',
-                            borderColor: '555555ff',
-                            label: { textColor: 'ccccccff' },
-                            placeholder: { textColor: '666666ff' },
-                            defaults: { textColor: 'ffffffff' },
-                            focus: { borderColor: '03a550ff' },
-                            error: { borderColor: 'f44444ff' },
+                            defaults: { backgroundColor: '1e2028ff', borderColor: '555555ff' },
+                            placeholderColor: '666666ff',
                         },
                         darkMode: {
-                            backgroundColor: '1e2028ff',
-                            borderColor: '555555ff',
-                            label: { textColor: 'ccccccff' },
-                            placeholder: { textColor: '666666ff' },
-                            defaults: { textColor: 'ffffffff' },
-                            focus: { borderColor: '03a550ff' },
-                            error: { borderColor: 'f44444ff' },
+                            defaults: { backgroundColor: '1e2028ff', borderColor: '555555ff' },
+                            placeholderColor: '666666ff',
                         },
                     },
-                    checkboxField: {
-                        lightMode: {
-                            label: { textColor: 'ccccccff' },
-                            defaults: { borderColor: '555555ff', backgroundColor: '1e2028ff' },
-                            checked: { borderColor: '03a550ff', backgroundColor: '03a550ff' },
-                        },
-                        darkMode: {
-                            label: { textColor: 'ccccccff' },
-                            defaults: { borderColor: '555555ff', backgroundColor: '1e2028ff' },
-                            checked: { borderColor: '03a550ff', backgroundColor: '03a550ff' },
-                        },
+                    inputLabel: {
+                        lightMode: { textColor: 'ccccccff' },
+                        darkMode:  { textColor: 'ccccccff' },
+                    },
+                    inputDescription: {
+                        lightMode: { textColor: '888888ff' },
+                        darkMode:  { textColor: '888888ff' },
                     },
                     link: {
                         lightMode: { defaults: { textColor: '03a550ff' }, hover: { textColor: '029040ff' } },
                         darkMode:  { defaults: { textColor: '03a550ff' }, hover: { textColor: '029040ff' } },
                     },
-                    phoneNumberSelector: { displayType: 'TEXT' },
-                    favicon: { enabledTypes: ['ICO', 'SVG'] },
+                    optionControls: {
+                        lightMode: {
+                            defaults: { backgroundColor: '1e2028ff', borderColor: '555555ff' },
+                            selected: { backgroundColor: '03a550ff', foregroundColor: 'ffffffff' },
+                        },
+                        darkMode: {
+                            defaults: { backgroundColor: '1e2028ff', borderColor: '555555ff' },
+                            selected: { backgroundColor: '03a550ff', foregroundColor: 'ffffffff' },
+                        },
+                    },
+                    focusState: {
+                        lightMode: { borderColor: '03a550ff' },
+                        darkMode:  { borderColor: '03a550ff' },
+                    },
                 },
             },
         });
