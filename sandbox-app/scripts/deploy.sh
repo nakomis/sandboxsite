@@ -15,7 +15,7 @@ for arg in "$@"; do
 done
 
 # --- Read current version ---
-VERSION_FILE="$APP_DIR/version.json"
+VERSION_FILE="$APP_DIR/src/version.json"
 CURRENT_VERSION=$(node -e "process.stdout.write(require('$VERSION_FILE').version)")
 
 # Strip -SNAPSHOT suffix

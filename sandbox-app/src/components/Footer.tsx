@@ -1,5 +1,5 @@
 import './Footer.css';
-import versionData from '../../version.json';
+import versionData from '../version.json';
 import { VERSION as pcbprinterVersion } from 'pcbprinter';
 
 function Footer(props: any) {
