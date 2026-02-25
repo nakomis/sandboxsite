@@ -139,7 +139,7 @@ export class ApiStack extends cdk.Stack {
 
         // Map the custom domain to the API Gateway
         customDomain.addBasePathMapping(this.api, {
-            pcbPath: '',
+            basePath: '',
         });
 
         // Create Route53 A record

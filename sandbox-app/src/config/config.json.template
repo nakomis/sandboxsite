@@ -14,5 +14,9 @@
     },
     "bootboots": {
         "imagesBucket": "<IMAGES_BUCKET>"
+    },
+    "pcbPrinter": {
+        "bucket": "<PCB_PRINTER_BUCKET>",
+        "table": "<PCB_PRINTER_TABLE>"
     }
 }

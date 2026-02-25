@@ -5,6 +5,7 @@ import { CloudfrontStack } from '../lib/cloudfront-stack';
 import { CertificateStack } from '../lib/certificate-stack';
 import { CognitoStack } from '../lib/cognito-stack';
 import { FirmwareBucketStack } from '../lib/firmware-bucket-stack';
+import { PcbPrinterStack } from '../lib/pcbprinter-stack';
 import { ApiStack } from '../lib/api-stack';
 import { WebSocketStack } from '../lib/websocket-stack';
 
@@ -28,15 +29,20 @@ const cloudfrontStack = new CloudfrontStack(app, 'SandboxCloudfrontStack', {
     domainName: domainName,
     crossRegionReferences: true
 });
+
+const firmwareBucketStack = new FirmwareBucketStack(app, 'SandboxFirmwareBucketStack', londonEnv);
+
+const pcbPrinterStack = new PcbPrinterStack(app, 'SandboxPcbPrinterStack', londonEnv);
+
 const cognitoStack = new CognitoStack(app, 'SandboxCognitoStack', {
     ...londonEnv,
     authDomainName: authDomain,
     domainName: domainName,
     authCertificateArn: certificateStack.authCertificate,
-    crossRegionReferences: true
+    crossRegionReferences: true,
+    pcbPrinterBucket: pcbPrinterStack.bucket,
+    pcbPrinterTable: pcbPrinterStack.table,
 });
-
-const firmwareBucketStack = new FirmwareBucketStack(app, 'SandboxFirmwareBucketStack', londonEnv);
 
 // API Stack for shared services (IoT device discovery, etc.)
 const apiStack = new ApiStack(app, 'SandboxApiStack', {

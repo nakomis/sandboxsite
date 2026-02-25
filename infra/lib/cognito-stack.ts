@@ -1,8 +1,10 @@
 import * as cdk from 'aws-cdk-lib';
 import * as cm from 'aws-cdk-lib/aws-certificatemanager';
 import * as cognito from 'aws-cdk-lib/aws-cognito';
+import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as route53 from 'aws-cdk-lib/aws-route53';
+import * as s3 from 'aws-cdk-lib/aws-s3';
 import * as targets from 'aws-cdk-lib/aws-route53-targets';
 import { ITable, Table } from 'aws-cdk-lib/aws-dynamodb';
 import { Bucket } from 'aws-cdk-lib/aws-s3';
@@ -13,6 +15,8 @@ export interface CognitoStackProps extends cdk.StackProps {
     authDomainName: string;
     domainName: string;
     authCertificateArn: cm.Certificate;
+    pcbPrinterBucket?: s3.IBucket;
+    pcbPrinterTable?: dynamodb.ITable;
 }
 
 export class CognitoStack extends cdk.Stack {
@@ -131,6 +135,25 @@ export class CognitoStack extends cdk.Stack {
             actions: ['execute-api:Invoke'],
             resources: [`arn:aws:execute-api:${this.region}:${this.account}:*/*/GET/devices`],
         }));
+
+        // Grant PCB Printer save/load permissions (optional)
+        if (props.pcbPrinterBucket) {
+            this.userRole.addToPolicy(new iam.PolicyStatement({
+                effect: iam.Effect.ALLOW,
+                actions: ['s3:PutObject', 's3:GetObject', 's3:HeadObject'],
+                resources: [`${props.pcbPrinterBucket.bucketArn}/*`],
+            }));
+        }
+        if (props.pcbPrinterTable) {
+            this.userRole.addToPolicy(new iam.PolicyStatement({
+                effect: iam.Effect.ALLOW,
+                actions: ['dynamodb:PutItem', 'dynamodb:Scan', 'dynamodb:Query'],
+                resources: [
+                    props.pcbPrinterTable.tableArn,
+                    `${props.pcbPrinterTable.tableArn}/index/*`,
+                ],
+            }));
+        }
 
         new cognito.CfnIdentityPoolRoleAttachment(this, 'SandboxIdentityPoolRoleAttachment', {
             identityPoolId: identityPool.ref,

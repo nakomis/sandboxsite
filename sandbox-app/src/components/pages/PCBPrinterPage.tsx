@@ -13,6 +13,16 @@ import type { PrinterOptions, StlOutputs } from 'pcbprinter';
 import * as THREE from 'three';
 import { STLLoader } from 'three/examples/jsm/loaders/STLLoader';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
+import type { PcbSaveRecord } from '../../dto/PcbSaveRecord';
+import {
+    hashBuffer,
+    getVersionNumbers,
+    uploadIfAbsent,
+    saveRecord,
+    loadRecords,
+    downloadFromS3,
+} from '../../services/pcbPrinterSaveService';
+import Config from '../../config/config';
 
 type PCBPrinterProps = PageProps & {
     creds: AWSCredentials | null;
@@ -21,7 +31,7 @@ type PCBPrinterProps = PageProps & {
 type ViewerMode = 'svg' | 'pcb' | 'press';
 
 // Subset of PrinterOptions relevant to the UI (outDir and writeSvg are CLI-only)
-type UIOptions = Omit<PrinterOptions, 'outDir' | 'writeSvg' | 'boardColor' | 'snapToleranceMm'>;
+export type UIOptions = Omit<PrinterOptions, 'outDir' | 'writeSvg' | 'boardColor' | 'snapToleranceMm'>;
 
 const DEFAULT_UI_OPTIONS: UIOptions = {
     boardThicknessMm: DEFAULT_OPTIONS.boardThicknessMm,
@@ -35,7 +45,22 @@ const DEFAULT_UI_OPTIONS: UIOptions = {
     traceSegments: DEFAULT_OPTIONS.traceSegments,
 };
 
-const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
+// Fetch font data for text relief
+async function loadFont(): Promise<ArrayBuffer | null> {
+    try {
+        const resp = await fetch(process.env.PUBLIC_URL + '/fonts/DroidSansMono.ttf');
+        return await resp.arrayBuffer();
+    } catch {
+        return null;
+    }
+}
+
+// Resolve {version} placeholder in SVG content
+function resolveVersion(svgContent: string, version: string): string {
+    return svgContent.replace(/\{version\}/g, version);
+}
+
+const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index, creds }) => {
     const [fileName, setFileName] = useState<string | null>(null);
     const [fileContent, setFileContent] = useState<string | null>(null);
     const [options, setOptions] = useState<UIOptions>(DEFAULT_UI_OPTIONS);
@@ -44,6 +69,13 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
     const [generating, setGenerating] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [viewerMode, setViewerMode] = useState<ViewerMode>('svg');
+
+    // Save/Load state
+    const [saving, setSaving] = useState(false);
+    const [saveError, setSaveError] = useState<string | null>(null);
+    const [loadOpen, setLoadOpen] = useState(false);
+    const [savedRecords, setSavedRecords] = useState<PcbSaveRecord[] | null>(null);
+    const [loadingRecords, setLoadingRecords] = useState(false);
 
     // STL viewer refs
     const canvasRef = useRef<HTMLDivElement>(null);
@@ -67,6 +99,7 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
         setFileName(file.name);
         setStlOutputs(null);
         setError(null);
+        setSaveError(null);
         const reader = new FileReader();
         reader.onload = (evt) => {
             setFileContent(evt.target?.result as string ?? null);
@@ -78,28 +111,26 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
         setOptions(prev => ({ ...prev, [key]: value }));
     }, []);
 
+    const runBuild = useCallback(async (svgContent: string, opts: UIOptions): Promise<StlOutputs> => {
+        const fullOptions: PrinterOptions = { ...DEFAULT_OPTIONS, ...opts };
+        if (fullOptions.textReliefMm > 0) {
+            const fontData = await loadFont();
+            if (fontData) fullOptions.fontData = fontData;
+        }
+        const model = parseFritzingSvg(svgContent, fullOptions);
+        snapTracesToPads(model, fullOptions);
+        return buildStls(model, fullOptions, {
+            locateFile: (f: string) => process.env.PUBLIC_URL + '/' + f,
+        });
+    }, []);
+
     const generate = useCallback(async () => {
         if (!fileContent) return;
         setGenerating(true);
         setError(null);
         setStlOutputs(null);
         try {
-            const fullOptions: PrinterOptions = {
-                ...DEFAULT_OPTIONS,
-                ...options,
-            };
-            // Load bundled Droid Sans Mono when text relief is requested
-            if (fullOptions.textReliefMm > 0) {
-                try {
-                    const fontResp = await fetch(process.env.PUBLIC_URL + '/fonts/DroidSansMono.ttf');
-                    fullOptions.fontData = await fontResp.arrayBuffer();
-                } catch { /* text relief silently skipped if font fetch fails */ }
-            }
-            const model = parseFritzingSvg(fileContent, fullOptions);
-            snapTracesToPads(model, fullOptions);
-            const outputs = await buildStls(model, fullOptions, {
-                locateFile: (f: string) => process.env.PUBLIC_URL + '/' + f,
-            });
+            const outputs = await runBuild(fileContent, options);
             setStlOutputs(outputs);
             setViewerMode('pcb');
         } catch (err) {
@@ -107,7 +138,120 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
         } finally {
             setGenerating(false);
         }
-    }, [fileContent, options]);
+    }, [fileContent, options, runBuild]);
+
+    const handleSave = useCallback(async () => {
+        if (!fileContent || !creds || !fileName) return;
+        setSaving(true);
+        setSaveError(null);
+        try {
+            const bucket = Config.pcbPrinter.bucket;
+            const baseName = fileName.replace(/\.svg$/i, '');
+
+            // Hash original SVG to determine versioning
+            const svgHash = await hashBuffer(fileContent);
+            const { major, minor } = await getVersionNumbers(baseName, svgHash, creds);
+            const version = `${major}.${minor}`;
+
+            // Substitute {version} and re-run build with versioned SVG
+            const versionedSvg = resolveVersion(fileContent, version);
+            const versionedOutputs = await runBuild(versionedSvg, options);
+
+            // Hash the three artefacts
+            const [svgStoreHash, pcbHash, pressHash] = await Promise.all([
+                hashBuffer(versionedSvg),
+                hashBuffer(versionedOutputs.pcb),
+                hashBuffer(versionedOutputs.press),
+            ]);
+
+            const svgKey = `svg/${svgStoreHash}.svg`;
+            const pcbStlKey = `stl/${pcbHash}-pcb.stl`;
+            const pressStlKey = `stl/${pressHash}-press.stl`;
+
+            await Promise.all([
+                uploadIfAbsent(bucket, svgKey, versionedSvg, 'image/svg+xml', creds),
+                uploadIfAbsent(bucket, pcbStlKey, versionedOutputs.pcb, 'model/stl', creds),
+                uploadIfAbsent(bucket, pressStlKey, versionedOutputs.press, 'model/stl', creds),
+            ]);
+
+            const now = new Date();
+            const record: PcbSaveRecord = {
+                id: crypto.randomUUID(),
+                filename: baseName,
+                svgHash,
+                majorVersion: major,
+                minorVersion: minor,
+                svgKey,
+                pcbStlKey,
+                pressStlKey,
+                options,
+                timestamp: now.toISOString(),
+                sandboxVersion: process.env.REACT_APP_VERSION ?? 'unknown',
+                pcbprinterVersion: '0.3.0',
+                ttl: Math.floor(now.getTime() / 1000) + 30 * 24 * 60 * 60,
+            };
+
+            await saveRecord(record, creds);
+
+            // Update viewer to show the versioned STLs
+            setStlOutputs(versionedOutputs);
+        } catch (err) {
+            setSaveError(String(err));
+        } finally {
+            setSaving(false);
+        }
+    }, [fileContent, fileName, creds, options, runBuild]);
+
+    const handleLoad = useCallback(async () => {
+        if (!creds) return;
+        setLoadOpen(true);
+        setLoadingRecords(true);
+        setSavedRecords(null);
+        try {
+            const records = await loadRecords(creds);
+            setSavedRecords(records);
+        } finally {
+            setLoadingRecords(false);
+        }
+    }, [creds]);
+
+    const handleLoadRecord = useCallback(async (record: PcbSaveRecord) => {
+        if (!creds) return;
+        setLoadOpen(false);
+        const bucket = Config.pcbPrinter.bucket;
+        try {
+            const [svgBuf, pcbBuf, pressBuf] = await Promise.all([
+                downloadFromS3(bucket, record.svgKey, creds),
+                downloadFromS3(bucket, record.pcbStlKey, creds),
+                downloadFromS3(bucket, record.pressStlKey, creds),
+            ]);
+            // Trigger SVG file download (so user's file input reflects the loaded file)
+            const svgText = new TextDecoder().decode(svgBuf);
+            setFileName(record.filename + '.svg');
+            setFileContent(svgText);
+            setOptions(record.options);
+            setStlOutputs({ pcb: pcbBuf, press: pressBuf });
+            setViewerMode('pcb');
+
+            // Download all three files to disk
+            const downloads: [ArrayBuffer, string, string][] = [
+                [svgBuf, record.filename + '.svg', 'image/svg+xml'],
+                [pcbBuf, record.filename + '-pcb.stl', 'model/stl'],
+                [pressBuf, record.filename + '-press.stl', 'model/stl'],
+            ];
+            for (const [buf, name, type] of downloads) {
+                const blob = new Blob([buf], { type });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = name;
+                a.click();
+                URL.revokeObjectURL(url);
+            }
+        } catch (err) {
+            setSaveError(String(err));
+        }
+    }, [creds]);
 
     const downloadStl = useCallback((buf: ArrayBuffer, name: string) => {
         const blob = new Blob([buf], { type: 'model/stl' });
@@ -302,10 +446,35 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
             ? 'Drag to rotate · scroll to zoom'
             : null;
 
+    const btnBase: React.CSSProperties = {
+        padding: '10px 20px',
+        border: 'none',
+        borderRadius: 4,
+        fontSize: 16,
+    };
+
     return (
         <Page tabId={tabId} index={index}>
             <div className="page" style={{ color: '#ccc', padding: '8px 32px 16px' }}>
-                <h1 style={{ color: '#fff', marginBottom: 6 }}>PCB Printer</h1>
+                {/* Header row */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                    <h1 style={{ color: '#fff', margin: 0 }}>PCB Printer</h1>
+                    <button
+                        onClick={handleLoad}
+                        disabled={!creds}
+                        style={{
+                            padding: '6px 16px',
+                            background: creds ? '#2a2d35' : '#1e1e1e',
+                            color: creds ? '#ccc' : '#444',
+                            border: '1px solid #444',
+                            borderRadius: 4,
+                            fontSize: 14,
+                            cursor: creds ? 'pointer' : 'not-allowed',
+                        }}
+                    >
+                        Load saved…
+                    </button>
+                </div>
                 <p style={{ color: '#888', marginBottom: 10, fontSize: 14 }}>
                     Export your PCB from Fritzing via <em>File → Export → as Image → SVG…</em>
                 </p>
@@ -420,6 +589,12 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
                                 <span style={{ color: '#faa', fontSize: 14 }}>{error}</span>
                             </section>
                         )}
+                        {saveError && (
+                            <section style={{ marginTop: 10, padding: 12, background: '#3a1515', borderRadius: 4 }}>
+                                <strong style={{ color: '#f44' }}>Save error:</strong>{' '}
+                                <span style={{ color: '#faa', fontSize: 14 }}>{saveError}</span>
+                            </section>
+                        )}
                     </div>
 
                     {/* Right column: preview fills space, downloads pin to bottom */}
@@ -517,12 +692,9 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
                                     disabled={!stlOutputs}
                                     onClick={() => stlOutputs && downloadStl(stlOutputs.pcb, (fileName ?? 'pcb') + '-pcb.stl')}
                                     style={{
-                                        padding: '10px 20px',
+                                        ...btnBase,
                                         background: stlOutputs ? '#03A550' : '#2a2d35',
                                         color: stlOutputs ? '#fff' : '#555',
-                                        border: 'none',
-                                        borderRadius: 4,
-                                        fontSize: 16,
                                         cursor: stlOutputs ? 'pointer' : 'not-allowed',
                                     }}
                                 >
@@ -532,22 +704,119 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index }) => {
                                     disabled={!stlOutputs}
                                     onClick={() => stlOutputs && downloadStl(stlOutputs.press, (fileName ?? 'pcb') + '-press.stl')}
                                     style={{
-                                        padding: '10px 20px',
+                                        ...btnBase,
                                         background: stlOutputs ? '#2244aa' : '#2a2d35',
                                         color: stlOutputs ? '#fff' : '#555',
-                                        border: 'none',
-                                        borderRadius: 4,
-                                        fontSize: 16,
                                         cursor: stlOutputs ? 'pointer' : 'not-allowed',
                                     }}
                                 >
                                     Download Press
+                                </button>
+                                <button
+                                    disabled={!stlOutputs || saving || !creds}
+                                    onClick={handleSave}
+                                    style={{
+                                        ...btnBase,
+                                        background: stlOutputs && !saving && creds ? '#2563eb' : '#2a2d35',
+                                        color: stlOutputs && !saving && creds ? '#fff' : '#555',
+                                        cursor: stlOutputs && !saving && creds ? 'pointer' : 'not-allowed',
+                                    }}
+                                >
+                                    {saving ? 'Saving…' : 'Save'}
                                 </button>
                             </div>
                         </section>
                     </div>
                 </div>
             </div>
+
+            {/* Load modal */}
+            {loadOpen && (
+                <div style={{
+                    position: 'fixed',
+                    inset: 0,
+                    zIndex: 1000,
+                    background: 'rgba(0,0,0,0.7)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                }}>
+                    <div style={{
+                        background: '#1e2028',
+                        border: '1px solid #444',
+                        borderRadius: 8,
+                        padding: 24,
+                        width: 820,
+                        maxWidth: '90vw',
+                        maxHeight: '80vh',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: 12,
+                    }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <h2 style={{ color: '#fff', margin: 0, fontSize: 18 }}>Saved designs</h2>
+                            <button
+                                onClick={() => setLoadOpen(false)}
+                                style={{
+                                    background: 'none',
+                                    border: '1px solid #555',
+                                    borderRadius: 4,
+                                    color: '#aaa',
+                                    cursor: 'pointer',
+                                    padding: '2px 10px',
+                                    fontSize: 16,
+                                }}
+                            >
+                                ✕
+                            </button>
+                        </div>
+
+                        {loadingRecords && (
+                            <div style={{ color: '#888', textAlign: 'center', padding: 32 }}>Loading…</div>
+                        )}
+
+                        {!loadingRecords && savedRecords !== null && savedRecords.length === 0 && (
+                            <div style={{ color: '#888', textAlign: 'center', padding: 32 }}>No saved designs found.</div>
+                        )}
+
+                        {!loadingRecords && savedRecords && savedRecords.length > 0 && (
+                            <div style={{ overflowY: 'auto', flex: 1 }}>
+                                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                                    <thead>
+                                        <tr style={{ borderBottom: '1px solid #333' }}>
+                                            {['Filename', 'Version', 'Timestamp', 'Options', 'pcbprinter'].map(h => (
+                                                <th key={h} style={{ color: '#888', textAlign: 'left', padding: '6px 10px', fontWeight: 500 }}>{h}</th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {savedRecords.map(rec => (
+                                            <tr
+                                                key={rec.id}
+                                                onClick={() => handleLoadRecord(rec)}
+                                                style={{
+                                                    borderBottom: '1px solid #2a2d35',
+                                                    cursor: 'pointer',
+                                                }}
+                                                onMouseEnter={e => (e.currentTarget.style.background = '#2a2d35')}
+                                                onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+                                            >
+                                                <td style={{ color: '#4fc3f7', padding: '8px 10px' }}>{rec.filename}</td>
+                                                <td style={{ color: '#ccc', padding: '8px 10px' }}>{rec.majorVersion}.{rec.minorVersion}</td>
+                                                <td style={{ color: '#aaa', padding: '8px 10px' }}>{new Date(rec.timestamp).toLocaleString()}</td>
+                                                <td style={{ color: '#aaa', padding: '8px 10px', fontSize: 12 }}>
+                                                    t={rec.options.boardThicknessMm} r={rec.options.traceRecessMm} c={rec.options.traceClearanceMm}
+                                                </td>
+                                                <td style={{ color: '#888', padding: '8px 10px' }}>{rec.pcbprinterVersion}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
         </Page>
     );
 };

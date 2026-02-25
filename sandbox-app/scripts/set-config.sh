@@ -66,4 +66,11 @@ AWS_ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
 AWS_REGION=$(aws configure get region)
 setValue imagesBucket "bootboots-images-${AWS_ACCOUNT_ID}-${AWS_REGION}"
 
+# PCB Printer save/load resources
+PCB_PRINTER_BUCKET=$(aws cloudformation describe-stacks --stack-name SandboxPcbPrinterStack --query "Stacks[0].Outputs[?OutputKey=='PcbPrinterBucketName'].OutputValue" --output text)
+setValue bucket "$PCB_PRINTER_BUCKET"
+
+PCB_PRINTER_TABLE=$(aws cloudformation describe-stacks --stack-name SandboxPcbPrinterStack --query "Stacks[0].Outputs[?OutputKey=='PcbPrinterTableName'].OutputValue" --output text)
+setValue table "$PCB_PRINTER_TABLE"
+
 rm -f $SCRIPT_DIR/../src/config/config.json.bk

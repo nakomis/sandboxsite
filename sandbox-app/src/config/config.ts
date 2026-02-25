@@ -15,6 +15,10 @@ export interface SandboxConfig {
     bootboots: {
         imagesBucket: string;
     };
+    pcbPrinter: {
+        bucket: string;
+        table: string;
+    };
 }
 
 let Config: SandboxConfig = require('./config.json');
