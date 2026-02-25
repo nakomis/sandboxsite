@@ -49,7 +49,8 @@ export async function headExists(bucket: string, key: string, creds: AWSCredenti
         return true;
     } catch (err: unknown) {
         const e = err as { name?: string; $metadata?: { httpStatusCode?: number } };
-        if (e.name === 'NotFound' || e.$metadata?.httpStatusCode === 404) return false;
+        // 403 with no ListBucket: S3 can't confirm non-existence — treat as missing
+        if (e.name === 'NotFound' || e.$metadata?.httpStatusCode === 404 || e.$metadata?.httpStatusCode === 403) return false;
         throw err;
     }
 }
