@@ -21,6 +21,7 @@ import BluetoothPage from './pages/Bluetooth';
 import MQTTPage from './pages/MQTT';
 import BootBootsPage from './pages/BootBootsPage';
 import EventsPage from './pages/Events';
+import PCBPrinterPage from './pages/PCBPrinterPage';
 
 const App: React.FC = () => {
     const auth = useAuth();
@@ -158,6 +159,7 @@ const App: React.FC = () => {
                                             <Tab label="MQTT" />
                                             <Tab label="Cat Labeling" />
                                             <Tab label="Catches" />
+                                            <Tab label="PCB Printer" />
                                         </Tabs>
                                         <div style={{ flexGrow: 1, display: 'flex', justifyContent: 'flex-end' }}>
                                             <button type="button" className="btn btn-primary" style={{ marginRight: 10, alignSelf: "anchor-center" }} onClick={() => {
@@ -174,6 +176,7 @@ const App: React.FC = () => {
                                 <MQTTPage tabId={tabId} index={2} creds={creds}></MQTTPage>
                                 <BootBootsPage tabId={tabId} index={3} creds={creds} username={auth.user?.profile?.preferred_username || null}></BootBootsPage>
                                 <EventsPage tabId={tabId} index={4} creds={creds}></EventsPage>
+                                <PCBPrinterPage tabId={tabId} index={5} creds={creds}></PCBPrinterPage>
                             </Box>
                         </ThemeProvider>
                         {
