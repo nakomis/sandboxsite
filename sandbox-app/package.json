@@ -38,14 +38,10 @@
     },
     "scripts": {
         "start": "AWS_PROFILE=nakom.is-sandbox ./scripts/set-config.sh localhost && react-scripts start",
-        "build": "REACT_APP_VERSION=$npm_package_version react-scripts build",
+        "build": "react-scripts build",
         "test": "react-scripts test",
         "eject": "react-scripts eject",
-        "deploy": "AWS_PROFILE=nakom.is-sandbox ./scripts/set-config.sh sandbox && ./scripts/deploy.sh",
-        "deploy:patch": "npm version patch && npm run deploy",
-        "deploy:minor": "npm version minor && npm run deploy",
-        "deploy:major": "npm version major && npm run deploy",
-        "version:check": "echo $npm_package_version"
+        "deploy": "bash scripts/deploy.sh"
     },
     "eslintConfig": {
         "extends": [

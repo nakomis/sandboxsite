@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import * as cdk from 'aws-cdk-lib';
+import * as fs from 'fs';
 import { CloudfrontStack } from '../lib/cloudfront-stack';
 import { CertificateStack } from '../lib/certificate-stack';
 import { CognitoStack } from '../lib/cognito-stack';
@@ -50,3 +51,7 @@ const webSocketStack = new WebSocketStack(app, 'SandboxWebSocketStack', {
     domainName: domainName,
     wsDomainName: wsDomain,
 });
+
+cdk.Tags.of(app).add("MH-Project", "sandbox.nakomis.com");
+const { version: infraVersion } = JSON.parse(fs.readFileSync('./version.json', 'utf-8'));
+cdk.Tags.of(app).add("MH-Version", infraVersion);

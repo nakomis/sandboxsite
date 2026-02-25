@@ -22,6 +22,7 @@ import MQTTPage from './pages/MQTT';
 import BootBootsPage from './pages/BootBootsPage';
 import EventsPage from './pages/Events';
 import PCBPrinterPage from './pages/PCBPrinterPage';
+import Footer from './Footer';
 
 const App: React.FC = () => {
     const auth = useAuth();
@@ -186,6 +187,7 @@ const App: React.FC = () => {
                         }
                     </header>
                 </div >
+                <Footer />
             </div>
         );
     } else {
@@ -199,6 +201,7 @@ const App: React.FC = () => {
                         <button type="button" className="btn btn-primary" onClick={() => auth.signinRedirect()}>Sign in</button>
                     </div>
                 </header>
+                <Footer />
             </div>
         );
     }

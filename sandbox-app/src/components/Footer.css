@@ -1,9 +1,16 @@
-.Footer {
-    margin-top: auto;
-    padding: .3rem;
-    text-align: left;
-    border-top: 1px solid #444;
-    background-color: rgba(0, 0, 0, 0.05);
-    color: rgba(255, 255, 255, 0.3);
-    font-size: calc(10px + .75vmin);
+.app-footer {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  padding: .3rem .75rem;
+  border-top: 1px solid #333;
+  background-color: #1f2329;
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 0.75rem;
+  z-index: 1200;
+}
+
+.app-footer a {
+  color: rgba(255, 255, 255, 0.3);
 }
