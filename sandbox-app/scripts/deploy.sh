@@ -31,10 +31,10 @@ IFS='.' read -r MAJOR MINOR PATCH <<< "$RELEASE_VERSION"
 echo "Preparing release: sandbox/$RELEASE_VERSION"
 
 # --- Check pcbprinter is not a SNAPSHOT ---
-PCBPRINTER_VERSION=$(node -e "process.stdout.write(require('$REPO_DIR/pcbprinter/version.json').version)")
+PCBPRINTER_VERSION=$(node -e "process.stdout.write(require('$APP_DIR/node_modules/pcbprinter/package.json').version)")
 if [[ "$PCBPRINTER_VERSION" == *-SNAPSHOT ]]; then
   echo "WARNING: pcbprinter is a SNAPSHOT version ($PCBPRINTER_VERSION). Refusing to deploy."
-  echo "Release pcbprinter first, then re-run npm install before deploying sandbox."
+  echo "Run 'npm install' in sandbox-app after releasing pcbprinter."
   exit 1
 fi
 
