@@ -242,6 +242,42 @@ export class CognitoStack extends cdk.Stack {
                         },
                         custom: {},
                     },
+                    inputField: {
+                        lightMode: {
+                            backgroundColor: '1e2028ff',
+                            borderColor: '555555ff',
+                            label: { textColor: 'ccccccff' },
+                            placeholder: { textColor: '666666ff' },
+                            defaults: { textColor: 'ffffffff' },
+                            focus: { borderColor: '03a550ff' },
+                            error: { borderColor: 'f44444ff' },
+                        },
+                        darkMode: {
+                            backgroundColor: '1e2028ff',
+                            borderColor: '555555ff',
+                            label: { textColor: 'ccccccff' },
+                            placeholder: { textColor: '666666ff' },
+                            defaults: { textColor: 'ffffffff' },
+                            focus: { borderColor: '03a550ff' },
+                            error: { borderColor: 'f44444ff' },
+                        },
+                    },
+                    checkboxField: {
+                        lightMode: {
+                            label: { textColor: 'ccccccff' },
+                            defaults: { borderColor: '555555ff', backgroundColor: '1e2028ff' },
+                            checked: { borderColor: '03a550ff', backgroundColor: '03a550ff' },
+                        },
+                        darkMode: {
+                            label: { textColor: 'ccccccff' },
+                            defaults: { borderColor: '555555ff', backgroundColor: '1e2028ff' },
+                            checked: { borderColor: '03a550ff', backgroundColor: '03a550ff' },
+                        },
+                    },
+                    link: {
+                        lightMode: { defaults: { textColor: '03a550ff' }, hover: { textColor: '029040ff' } },
+                        darkMode:  { defaults: { textColor: '03a550ff' }, hover: { textColor: '029040ff' } },
+                    },
                     phoneNumberSelector: { displayType: 'TEXT' },
                     favicon: { enabledTypes: ['ICO', 'SVG'] },
                 },
