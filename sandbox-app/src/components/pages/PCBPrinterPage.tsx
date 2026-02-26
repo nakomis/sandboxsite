@@ -516,10 +516,12 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index, creds }) => {
                         step={step}
                         value={val}
                         onChange={e => {
+                            // During the animation cooldown, ignore all events (including the
+                            // browser's re-sample of the thumb position after max doubles).
+                            if (expandCooldownRef.current.has(key)) return;
                             const num = unit === '' ? parseInt(e.target.value, 10) : parseFloat(e.target.value);
                             setOptions(prev => ({ ...prev, [key]: num }));
                             if (num >= currentMax
-                                && !expandCooldownRef.current.has(key)
                                 && !(hardMax !== undefined && currentMax >= hardMax)) {
                                 const newMax = hardMax !== undefined
                                     ? Math.min(currentMax * 2, hardMax)
