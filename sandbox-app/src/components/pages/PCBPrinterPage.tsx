@@ -107,6 +107,17 @@ const INJECTED_CSS = `
     border: none;
     box-sizing: border-box;
   }
+  @keyframes pcb-slider-expand {
+    0%   { transform: scale(1, 1); }
+    40%  { transform: scale(2, 2); }
+    100% { transform: scale(1, 1); }
+  }
+  .pcb-slider-expanding {
+    animation: pcb-slider-expand 0.5s ease;
+    position: relative;
+    z-index: 50;
+    transform-origin: left center;
+  }
   .pcb-btn { transition: filter 0.12s; }
   .pcb-btn:hover:not(:disabled) { filter: brightness(1.15); }
   .pcb-row:hover td { background: ${C.ctrl} !important; }
@@ -130,6 +141,8 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index, creds }) => {
     // Dynamic slider maxes and expand animation
     const [sliderMaxes, setSliderMaxes] = useState<Partial<Record<keyof UIOptions, number>>>({});
     const [expandingSlider, setExpandingSlider] = useState<keyof UIOptions | null>(null);
+    // Cooldown ref: prevents re-triggering expansion mid-drag after the max has just doubled
+    const expandCooldownRef = useRef<Set<keyof UIOptions>>(new Set());
 
     // Save/Load state
     const [saving, setSaving] = useState(false);
@@ -491,13 +504,10 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index, creds }) => {
                     <span style={{ color: '#aaa', fontSize: 13 }}>{label}</span>
                     <span style={{ color: '#ccc', fontSize: 13, minWidth: 48, textAlign: 'right' }}>{displayVal}</span>
                 </div>
-                <div style={{
-                    position: 'relative',
-                    zIndex: isExpanding ? 50 : undefined,
-                    transform: isExpanding ? 'scale(2, 2)' : 'scale(1, 1)',
-                    transformOrigin: 'left center',
-                    transition: 'transform 0.25s ease',
-                }}>
+                <div
+                    className={isExpanding ? 'pcb-slider-expanding' : undefined}
+                    style={{ position: 'relative', transformOrigin: 'left center' }}
+                >
                     <input
                         type="range"
                         className="pcb-slider"
@@ -508,17 +518,20 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index, creds }) => {
                         onChange={e => {
                             const num = unit === '' ? parseInt(e.target.value, 10) : parseFloat(e.target.value);
                             setOptions(prev => ({ ...prev, [key]: num }));
-                        }}
-                        onPointerUp={e => {
-                            const released = parseFloat((e.target as HTMLInputElement).value);
-                            if (released < currentMax) return;
-                            if (hardMax !== undefined && currentMax >= hardMax) return;
-                            const newMax = hardMax !== undefined
-                                ? Math.min(currentMax * 2, hardMax)
-                                : currentMax * 2;
-                            setSliderMaxes(prev => ({ ...prev, [key]: newMax }));
-                            setExpandingSlider(key);
-                            setTimeout(() => setExpandingSlider(null), 350);
+                            if (num >= currentMax
+                                && !expandCooldownRef.current.has(key)
+                                && !(hardMax !== undefined && currentMax >= hardMax)) {
+                                const newMax = hardMax !== undefined
+                                    ? Math.min(currentMax * 2, hardMax)
+                                    : currentMax * 2;
+                                expandCooldownRef.current.add(key);
+                                setSliderMaxes(prev => ({ ...prev, [key]: newMax }));
+                                setExpandingSlider(key);
+                                setTimeout(() => {
+                                    expandCooldownRef.current.delete(key);
+                                    setExpandingSlider(null);
+                                }, 550);
+                            }
                         }}
                     />
                 </div>
