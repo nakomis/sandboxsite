@@ -5,7 +5,7 @@ var BLOCKED_HTML = '<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><
 
 function handler(event) {
     var request = event.request;
-    var clientIp = event.context.viewer.ip;
+    var clientIp = event.viewer.ip;
 
     for (var i = 0; i < EXEMPT_PATHS.length; i++) {
         if (request.uri === EXEMPT_PATHS[i]) {
