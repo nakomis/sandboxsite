@@ -7,10 +7,13 @@ import * as cm from 'aws-cdk-lib/aws-certificatemanager';
 import * as route53 from 'aws-cdk-lib/aws-route53';
 import { RemovalPolicy } from 'aws-cdk-lib';
 import * as targets from 'aws-cdk-lib/aws-route53-targets';
+import * as path from 'path';
+import * as fs from 'fs';
 
 export interface CloudfrontStackProps extends cdk.StackProps {
     certificate: cm.Certificate,
     domainName: string,
+    allowedIp: string,
 }
 
 export class CloudfrontStack extends cdk.Stack {
@@ -28,11 +31,27 @@ export class CloudfrontStack extends cdk.Stack {
             removalPolicy: RemovalPolicy.RETAIN,
         });
 
+        const rawFunctionCode = fs.readFileSync(
+            path.join(__dirname, '../functions/ip-allowlist.js'),
+            'utf-8'
+        );
+        const functionCode = rawFunctionCode.replace(/['"]ALLOWED_IP_PLACEHOLDER['"]/g, `'${props.allowedIp}'`);
+
+        const ipAllowlistFn = new cf.Function(this, 'IpAllowlistFunction', {
+            code: cf.FunctionCode.fromInline(functionCode),
+            runtime: cf.FunctionRuntime.JS_2_0,
+            comment: 'Blocks non-allowed IPs with a branded holding page',
+        });
+
         this.distribution = new cf.Distribution(this, "SandboxDistribution", {
             comment: 'Nakomis Sandbox Distribution',
             defaultBehavior: {
                 origin: S3BucketOrigin.withOriginAccessControl(this.bucket),
                 viewerProtocolPolicy: cf.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+                functionAssociations: [{
+                    function: ipAllowlistFn,
+                    eventType: cf.FunctionEventType.VIEWER_REQUEST,
+                }],
             },
             domainNames: [props.domainName],
             certificate: props.certificate,
