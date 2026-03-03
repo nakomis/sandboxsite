@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import * as cdk from 'aws-cdk-lib';
 import * as fs from 'fs';
+import * as path from 'path';
 import { CloudfrontStack } from '../lib/cloudfront-stack';
 import { CertificateStack } from '../lib/certificate-stack';
 import { CognitoStack } from '../lib/cognito-stack';
@@ -23,10 +24,19 @@ const certificateStack = new CertificateStack(app, 'SandboxCertificateStack', {
     authDomain: authDomain,
     apiDomain: apiDomain,
 });
+const appConfig = JSON.parse(
+    fs.readFileSync(path.join(__dirname, '../../sandbox-app/src/config/config.json'), 'utf-8')
+) as { allowedIp: string };
+
+if (!appConfig.allowedIp) {
+    throw new Error('allowedIp must be set in sandbox-app/src/config/config.json before deploying SandboxCloudfrontStack');
+}
+
 const cloudfrontStack = new CloudfrontStack(app, 'SandboxCloudfrontStack', {
     ...londonEnv,
     certificate: certificateStack.certificate,
     domainName: domainName,
+    allowedIp: appConfig.allowedIp,
     crossRegionReferences: true
 });
 

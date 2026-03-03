@@ -13,6 +13,7 @@ import * as fs from 'fs';
 export interface CloudfrontStackProps extends cdk.StackProps {
     certificate: cm.Certificate,
     domainName: string,
+    allowedIp: string,
 }
 
 export class CloudfrontStack extends cdk.Stack {
@@ -30,24 +31,11 @@ export class CloudfrontStack extends cdk.Stack {
             removalPolicy: RemovalPolicy.RETAIN,
         });
 
-        const appConfig = JSON.parse(
-            fs.readFileSync(
-                path.join(__dirname, '../../sandbox-app/src/config/config.json'),
-                'utf-8'
-            )
-        ) as { allowedIp: string };
-
-        if (!appConfig.allowedIp) {
-            throw new Error(
-                'allowedIp must be set in sandbox-app/src/config/config.json before deploying SandboxCloudfrontStack'
-            );
-        }
-
         const rawFunctionCode = fs.readFileSync(
             path.join(__dirname, '../functions/ip-allowlist.js'),
             'utf-8'
         );
-        const functionCode = rawFunctionCode.replace(/['"]ALLOWED_IP_PLACEHOLDER['"]/g, `'${appConfig.allowedIp}'`);
+        const functionCode = rawFunctionCode.replace(/['"]ALLOWED_IP_PLACEHOLDER['"]/g, `'${props.allowedIp}'`);
 
         const ipAllowlistFn = new cf.Function(this, 'IpAllowlistFunction', {
             code: cf.FunctionCode.fromInline(functionCode),
