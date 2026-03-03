@@ -37,11 +37,17 @@ export class CloudfrontStack extends cdk.Stack {
             )
         ) as { allowedIp: string };
 
+        if (!appConfig.allowedIp) {
+            throw new Error(
+                'allowedIp must be set in sandbox-app/src/config/config.json before deploying SandboxCloudfrontStack'
+            );
+        }
+
         const rawFunctionCode = fs.readFileSync(
             path.join(__dirname, '../functions/ip-allowlist.js'),
             'utf-8'
         );
-        const functionCode = rawFunctionCode.replace("'ALLOWED_IP_PLACEHOLDER'", `'${appConfig.allowedIp}'`);
+        const functionCode = rawFunctionCode.replace(/['"]ALLOWED_IP_PLACEHOLDER['"]/g, `'${appConfig.allowedIp}'`);
 
         const ipAllowlistFn = new cf.Function(this, 'IpAllowlistFunction', {
             code: cf.FunctionCode.fromInline(functionCode),
