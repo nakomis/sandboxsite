@@ -26,17 +26,17 @@ const certificateStack = new CertificateStack(app, 'SandboxCertificateStack', {
 });
 const appConfig = JSON.parse(
     fs.readFileSync(path.join(__dirname, '../../sandbox-app/src/config/config.json'), 'utf-8')
-) as { allowedIp: string };
+) as { allowedIps: string[] };
 
-if (!appConfig.allowedIp) {
-    throw new Error('allowedIp must be set in sandbox-app/src/config/config.json before deploying SandboxCloudfrontStack');
+if (!appConfig.allowedIps || appConfig.allowedIps.length === 0) {
+    throw new Error('allowedIps must be a non-empty array in sandbox-app/src/config/config.json before deploying SandboxCloudfrontStack');
 }
 
 const cloudfrontStack = new CloudfrontStack(app, 'SandboxCloudfrontStack', {
     ...londonEnv,
     certificate: certificateStack.certificate,
     domainName: domainName,
-    allowedIp: appConfig.allowedIp,
+    allowedIps: appConfig.allowedIps,
     crossRegionReferences: true
 });
 

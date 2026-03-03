@@ -25,7 +25,7 @@ function buildTemplate(): Template {
         crossRegionReferences: true,
         certificate,
         domainName: 'sandbox.nakomis.com',
-        allowedIp: 'TEST_ALLOWED_IP',
+        allowedIps: ['TEST_ALLOWED_IP'],
     });
     return Template.fromStack(stack);
 }

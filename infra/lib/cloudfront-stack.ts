@@ -13,7 +13,7 @@ import * as fs from 'fs';
 export interface CloudfrontStackProps extends cdk.StackProps {
     certificate: cm.Certificate,
     domainName: string,
-    allowedIp: string,
+    allowedIps: string[],
 }
 
 export class CloudfrontStack extends cdk.Stack {
@@ -35,7 +35,7 @@ export class CloudfrontStack extends cdk.Stack {
             path.join(__dirname, '../functions/ip-allowlist.js'),
             'utf-8'
         );
-        const functionCode = rawFunctionCode.replace(/['"]ALLOWED_IP_PLACEHOLDER['"]/g, `'${props.allowedIp}'`);
+        const functionCode = rawFunctionCode.replace("['ALLOWED_IPS_PLACEHOLDER']", JSON.stringify(props.allowedIps));
 
         const ipAllowlistFn = new cf.Function(this, 'IpAllowlistFunction', {
             code: cf.FunctionCode.fromInline(functionCode),

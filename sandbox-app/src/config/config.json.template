@@ -19,5 +19,5 @@
         "bucket": "<PCB_PRINTER_BUCKET>",
         "table": "<PCB_PRINTER_TABLE>"
     },
-    "allowedIp": ""
+    "allowedIps": []
 }
