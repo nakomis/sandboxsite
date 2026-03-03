@@ -141,3 +141,6 @@ vite.config.ts.timestamp-*
 # MH Vim swap files
 **/*.swp
 .DS_Store
+
+# Local planning docs (may contain sensitive config values)
+docs/plans/
