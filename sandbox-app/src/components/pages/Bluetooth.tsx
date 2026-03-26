@@ -693,6 +693,10 @@ const BluetoothPage = (props: BluetoothProps) => {
                             else if (responseJson.type === 'settings') {
                                 console.log('Settings received:', responseJson);
                                 setTrainingMode(responseJson.training_mode || false);
+                            }
+                            // Handle camera settings response
+                            else if (responseJson.type === 'camera_settings') {
+                                console.log('Camera settings received:', responseJson);
                                 if (responseJson.camera) {
                                     setCameraSettings(prev => ({ ...prev, ...responseJson.camera }));
                                 }
@@ -999,6 +1003,10 @@ const BluetoothPage = (props: BluetoothProps) => {
                             else if (responseJson.type === 'settings') {
                                 console.log('Settings received:', responseJson);
                                 setTrainingMode(responseJson.training_mode || false);
+                            }
+                            // Handle camera settings response
+                            else if (responseJson.type === 'camera_settings') {
+                                console.log('Camera settings received:', responseJson);
                                 if (responseJson.camera) {
                                     setCameraSettings(prev => ({ ...prev, ...responseJson.camera }));
                                 }
@@ -1267,10 +1275,11 @@ const BluetoothPage = (props: BluetoothProps) => {
         if (!connection.commandCharacteristic) return;
 
         try {
-            const command = JSON.stringify({ command: "get_settings" });
             const encoder = new TextEncoder();
-            await connection.commandCharacteristic.writeValue(encoder.encode(command));
+            await connection.commandCharacteristic.writeValue(encoder.encode(JSON.stringify({ command: "get_settings" })));
             console.log('Sent get_settings command');
+            await connection.commandCharacteristic.writeValue(encoder.encode(JSON.stringify({ command: "get_camera_settings" })));
+            console.log('Sent get_camera_settings command');
         } catch (err) {
             console.error('Error requesting settings:', err);
             setError(`Failed to request settings: ${err}`);
