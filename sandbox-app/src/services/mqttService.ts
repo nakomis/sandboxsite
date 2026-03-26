@@ -37,12 +37,16 @@ export async function signedFetch(
 
     const urlObj = new URL(url);
 
+    const query: Record<string, string> = {};
+    urlObj.searchParams.forEach((value, key) => { query[key] = value; });
+
     const request = {
         method: options.method || 'GET',
         protocol: urlObj.protocol,
         hostname: urlObj.hostname,
         port: urlObj.port ? parseInt(urlObj.port) : undefined,
-        path: urlObj.pathname + urlObj.search,
+        path: urlObj.pathname,
+        query,
         headers: {
             host: urlObj.host,
             ...(options.headers as Record<string, string> || {}),

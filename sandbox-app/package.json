@@ -64,5 +64,8 @@
     "devDependencies": {
         "@types/three": "^0.172.0",
         "@types/web-bluetooth": "^0.0.21"
+    },
+    "overrides": {
+        "svgo": "^2.8.0"
     }
 }
