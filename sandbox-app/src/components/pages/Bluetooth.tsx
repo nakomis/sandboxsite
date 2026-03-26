@@ -70,6 +70,18 @@ const FRAME_SIZE_OPTIONS: { value: number; label: string }[] = [
     { value: 13, label: 'UXGA (1600x1200)' },
 ];
 
+// Wraps a GATT promise with a timeout. Chrome caches GATT profiles and can hang
+// indefinitely on getPrimaryService() if the firmware has changed since last pairing.
+// Rejecting after a timeout allows us to detect stale cache and call device.forget().
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const withGattTimeout = <T = any>(promise: Promise<T>, timeoutMs = 10000): Promise<T> =>
+    Promise.race([
+        promise,
+        new Promise<T>((_, reject) =>
+            setTimeout(() => reject(new Error('gatt-timeout')), timeoutMs)
+        )
+    ]);
+
 // BootBoots BLE Service UUIDs (lowercase as required by Web Bluetooth API)
 const BOOTBOOTS_SERVICE_UUID = "bb00b007-5af3-41c3-9689-2fc7175c1ba8";
 const OTA_SERVICE_UUID = "99db6ea6-27e4-434d-aafd-795cf95feb06";
@@ -176,7 +188,7 @@ const CameraSlider = ({ label, value, min, max, setting, onChange, disabled }: {
                     type="range"
                     min={min}
                     max={max}
-                    value={value}
+                    value={value}   
                     onChange={(e) => onChange(setting, parseInt(e.target.value))}
                     disabled={disabled}
                     style={{ width: '120px', cursor: disabled ? 'wait' : 'pointer' }}
@@ -410,12 +422,13 @@ const BluetoothPage = (props: BluetoothProps) => {
 
     // Connect to BootBoots device
     const connectToBootBoots = useCallback(async () => {
+        let device: BluetoothDevice | undefined;
         try {
             setConnectionStatus("Connecting...");
             setError(null);
 
             // Request device - filter by service UUID for reliable discovery of Nakomis ESP32 devices
-            const device = await navigator.bluetooth.requestDevice({
+            device = await navigator.bluetooth.requestDevice({
                 filters: [
                     { services: [BOOTBOOTS_SERVICE_UUID] }
                 ],
@@ -437,13 +450,14 @@ const BluetoothPage = (props: BluetoothProps) => {
             const server = await device.gatt!.connect();
             console.log('Connected to GATT Server');
 
-            // Get primary service
-            const service = await server.getPrimaryService(BOOTBOOTS_SERVICE_UUID);
+            // Get primary service — wrapped in a timeout to detect stale GATT cache
+            // (Chrome caches GATT profiles; a firmware update can cause getPrimaryService to hang)
+            const service = await withGattTimeout(server.getPrimaryService(BOOTBOOTS_SERVICE_UUID));
             console.log('Got service');
 
             // Get characteristics (logs is optional - Kappa-Warmer doesn't have it)
-            const statusChar = await service.getCharacteristic(STATUS_CHARACTERISTIC_UUID);
-            const commandChar = await service.getCharacteristic(COMMAND_CHARACTERISTIC_UUID);
+            const statusChar = await withGattTimeout(service.getCharacteristic(STATUS_CHARACTERISTIC_UUID));
+            const commandChar = await withGattTimeout(service.getCharacteristic(COMMAND_CHARACTERISTIC_UUID));
 
             // Try to get logs characteristic (optional)
             let logsChar: BluetoothRemoteGATTCharacteristic | null = null;
@@ -735,7 +749,14 @@ const BluetoothPage = (props: BluetoothProps) => {
 
         } catch (err) {
             console.error('Error connecting to BootBoots:', err);
-            setError(`Connection failed: ${err}`);
+            const isTimeout = err instanceof Error && err.message === 'gatt-timeout';
+            if (isTimeout && device) {
+                try { await device.forget(); } catch { /* forget() not available in all browsers */ }
+                setPairedDevices(prev => prev.filter(d => d.id !== device!.id));
+                setError('Service discovery timed out — the device profile was stale after a firmware update. The device has been forgotten; please reconnect.');
+            } else {
+                setError(`Connection failed: ${err}`);
+            }
             setConnectionStatus("Disconnected");
         }
     }, [handleStatusUpdate]);
@@ -760,6 +781,13 @@ const BluetoothPage = (props: BluetoothProps) => {
         setLastUpdate(null);
     }, [connection.server]);
 
+    // Forget a paired device — clears Chrome's GATT cache so the next connection does
+    // fresh service discovery. Useful after a firmware update changes the GATT profile.
+    const forgetDevice = useCallback(async (device: BluetoothDevice) => {
+        try { await device.forget(); } catch { /* forget() not available in all browsers */ }
+        setPairedDevices(prev => prev.filter(d => d.id !== device.id));
+    }, []);
+
     // Reconnect to a previously paired device
     const reconnectToDevice = useCallback(async (device: BluetoothDevice) => {
         try {
@@ -782,13 +810,13 @@ const BluetoothPage = (props: BluetoothProps) => {
             const server = await device.gatt!.connect();
             console.log('Reconnected to GATT Server');
 
-            // Get primary service
-            const service = await server.getPrimaryService(BOOTBOOTS_SERVICE_UUID);
+            // Get primary service — wrapped in a timeout to detect stale GATT cache
+            const service = await withGattTimeout(server.getPrimaryService(BOOTBOOTS_SERVICE_UUID));
             console.log('Got service');
 
             // Get characteristics (logs is optional - Kappa-Warmer doesn't have it)
-            const statusChar = await service.getCharacteristic(STATUS_CHARACTERISTIC_UUID);
-            const commandChar = await service.getCharacteristic(COMMAND_CHARACTERISTIC_UUID);
+            const statusChar = await withGattTimeout(service.getCharacteristic(STATUS_CHARACTERISTIC_UUID));
+            const commandChar = await withGattTimeout(service.getCharacteristic(COMMAND_CHARACTERISTIC_UUID));
 
             // Try to get logs characteristic (optional)
             let logsChar: BluetoothRemoteGATTCharacteristic | null = null;
@@ -1005,7 +1033,14 @@ const BluetoothPage = (props: BluetoothProps) => {
 
         } catch (err) {
             console.error('Error reconnecting:', err);
-            setError(`Reconnection failed: ${err}`);
+            const isTimeout = err instanceof Error && err.message === 'gatt-timeout';
+            if (isTimeout) {
+                try { await device.forget(); } catch { /* forget() not available in all browsers */ }
+                setPairedDevices(prev => prev.filter(d => d.id !== device.id));
+                setError('Service discovery timed out — the device profile was stale after a firmware update. The device has been forgotten; please reconnect.');
+            } else {
+                setError(`Reconnection failed: ${err}`);
+            }
             setConnectionStatus("Disconnected");
             setIsReconnecting(false);
         }
@@ -1423,16 +1458,25 @@ const BluetoothPage = (props: BluetoothProps) => {
                                         <strong>Previously paired devices:</strong>
                                     </p>
                                     {pairedDevices.map((device) => (
-                                        <button
-                                            key={device.id}
-                                            type="button"
-                                            className="btn btn-outline-primary"
-                                            onClick={() => reconnectToDevice(device)}
-                                            disabled={isReconnecting}
-                                            style={{ marginRight: '10px', marginBottom: '5px' }}
-                                        >
-                                            {isReconnecting ? "Reconnecting..." : `Reconnect to ${device.name}`}
-                                        </button>
+                                        <span key={device.id} style={{ display: 'inline-flex', gap: '4px', marginRight: '10px', marginBottom: '5px' }}>
+                                            <button
+                                                type="button"
+                                                className="btn btn-outline-primary"
+                                                onClick={() => reconnectToDevice(device)}
+                                                disabled={isReconnecting}
+                                            >
+                                                {isReconnecting ? "Reconnecting..." : `Reconnect to ${device.name}`}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="btn btn-outline-secondary"
+                                                onClick={() => forgetDevice(device)}
+                                                disabled={isReconnecting}
+                                                title="Forget device — clears cached GATT profile. Use this if reconnection hangs after a firmware update."
+                                            >
+                                                Forget
+                                            </button>
+                                        </span>
                                     ))}
                                 </div>
                             )}
