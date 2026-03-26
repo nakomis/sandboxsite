@@ -103,6 +103,7 @@ interface BootBootsSystemStatus {
         wifi_connected: boolean;
         sd_card_ready: boolean;
         i2c_ready: boolean;
+        pcf8574_ready: boolean;
         atomizer_enabled: boolean;
         training_mode: boolean;
     };
@@ -1918,7 +1919,7 @@ const BluetoothPage = (props: BluetoothProps) => {
                                 padding: '15px',
                                 backgroundColor: '#282c34'
                             }}>
-                                {!systemStatus?.system.i2c_ready && (
+                                {systemStatus && !systemStatus.system.pcf8574_ready && (
                                     <p style={{ color: '#ff9800', fontSize: '13px', marginBottom: '12px' }}>
                                         PCF8574 not ready — check I2C connections
                                     </p>
@@ -1957,12 +1958,12 @@ const BluetoothPage = (props: BluetoothProps) => {
                                         <input
                                             type="checkbox"
                                             checked={flashLedOn}
-                                            disabled={!systemStatus?.system.i2c_ready || peripheralPending === 'flash_led'}
+                                            disabled={systemStatus && !systemStatus.system.pcf8574_ready || peripheralPending === 'flash_led'}
                                             onChange={() => setPeripheralState('flash_led', !flashLedOn)}
                                             style={{ opacity: 0, width: 0, height: 0 }}
                                         />
                                         <span style={{
-                                            position: 'absolute', cursor: !systemStatus?.system.i2c_ready ? 'not-allowed' : 'pointer',
+                                            position: 'absolute', cursor: systemStatus && !systemStatus.system.pcf8574_ready ? 'not-allowed' : 'pointer',
                                             top: 0, left: 0, right: 0, bottom: 0,
                                             backgroundColor: flashLedOn ? '#4CAF50' : '#555',
                                             opacity: peripheralPending === 'flash_led' ? 0.6 : 1,
@@ -1990,12 +1991,12 @@ const BluetoothPage = (props: BluetoothProps) => {
                                         <input
                                             type="checkbox"
                                             checked={ledStripOn}
-                                            disabled={!systemStatus?.system.i2c_ready || peripheralPending === 'led_strip'}
+                                            disabled={systemStatus && !systemStatus.system.pcf8574_ready || peripheralPending === 'led_strip'}
                                             onChange={() => setPeripheralState('led_strip', !ledStripOn)}
                                             style={{ opacity: 0, width: 0, height: 0 }}
                                         />
                                         <span style={{
-                                            position: 'absolute', cursor: !systemStatus?.system.i2c_ready ? 'not-allowed' : 'pointer',
+                                            position: 'absolute', cursor: systemStatus && !systemStatus.system.pcf8574_ready ? 'not-allowed' : 'pointer',
                                             top: 0, left: 0, right: 0, bottom: 0,
                                             backgroundColor: ledStripOn ? '#4CAF50' : '#555',
                                             opacity: peripheralPending === 'led_strip' ? 0.6 : 1,
@@ -2023,12 +2024,12 @@ const BluetoothPage = (props: BluetoothProps) => {
                                         <input
                                             type="checkbox"
                                             checked={sprayOn}
-                                            disabled={!systemStatus?.system.i2c_ready || peripheralPending === 'spray'}
+                                            disabled={systemStatus && !systemStatus.system.pcf8574_ready || peripheralPending === 'spray'}
                                             onChange={() => setPeripheralState('spray', !sprayOn)}
                                             style={{ opacity: 0, width: 0, height: 0 }}
                                         />
                                         <span style={{
-                                            position: 'absolute', cursor: !systemStatus?.system.i2c_ready ? 'not-allowed' : 'pointer',
+                                            position: 'absolute', cursor: systemStatus && !systemStatus.system.pcf8574_ready ? 'not-allowed' : 'pointer',
                                             top: 0, left: 0, right: 0, bottom: 0,
                                             backgroundColor: sprayOn ? '#f44336' : '#555',
                                             opacity: peripheralPending === 'spray' ? 0.6 : 1,
