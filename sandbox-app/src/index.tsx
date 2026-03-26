@@ -12,7 +12,7 @@ import Outline from './Outline';
 
 /*
     Looking for something interesting in the code?
-    Get the full source code at https://nakom.is/mushroom-code
+    Get the full source code at https://nakom.is/sandbox-code
     It's an open-source project, so feel free to contribute or use it as you like!
 */
 
@@ -20,7 +20,7 @@ const cognitoAuthConfig = {
     authority: Config.cognito.authority,
     client_id: Config.cognito.userPoolClientId,
     redirect_uri: Config.cognito.redirectUri,
-    // I'm happy for these values to be hardcoded for now, but they can be configured later
+    post_logout_redirect_uri: Config.cognito.logoutUri,
     response_type: "code",
     scope: "email openid phone profile",
 };
@@ -38,7 +38,6 @@ root.render(
                             <Route path="/" element={<App />} />
                             <Route path="/loggedin" element={<LoggedIn />} />
                             <Route path="/logout" element={<Logout />} />
-                            {/* Add more routes as needed */}
                         </Routes>
                     </BrowserRouter>
                 </AuthProvider>

@@ -66,7 +66,7 @@ const C = {
     input:       '#1e2028',
     border:      '#3a3f4b',
     borderSubtle:'#2e3240',
-    accent:      '#03A550',
+    accent:      '#03a550',
     accentPress: '#2244aa',
     accentSave:  '#2563eb',
     text:        '#ccc',

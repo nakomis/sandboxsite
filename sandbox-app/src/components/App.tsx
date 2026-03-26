@@ -45,7 +45,7 @@ const App: React.FC = () => {
         idToken: string
     ): Promise<Credentials | undefined> {
         const client = new CognitoIdentityClient({ region });
-        const providerName = `cognito-idp.eu-west-2.amazonaws.com/eu-west-2_FdqHeJ7ca`;
+        const providerName = Config.cognito.authority.replace(/^https:\/\//, "");
 
         // Step 1: Get the Cognito Identity ID
         const getIdCommand = new GetIdCommand({
@@ -76,8 +76,8 @@ const App: React.FC = () => {
         }
         (async () => {
             const credentials = await getAWSCredentialsFromIdToken(
-                'eu-west-2',
-                'eu-west-2:f7fcd995-522d-4034-89d4-3ffff91da0bb',
+                Config.aws.region,
+                Config.cognito.identityPoolId,
                 auth.user?.id_token || ''
             );
             setCreds(credentials ?? null);
