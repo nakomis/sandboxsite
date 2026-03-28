@@ -769,9 +769,11 @@ const BluetoothPage = (props: BluetoothProps) => {
                 commandCharacteristic: commandChar
             });
 
-            // Initialize OTA service for firmware updates
+            // Initialize OTA service for firmware updates (also fetches firmware version)
             try {
                 await bluetoothService.initFromServer(server);
+                const version = bluetoothService.getCurrentVersion();
+                setCurrentFirmwareVersion(version !== 'Unknown' ? version : null);
             } catch (err) {
                 console.warn('OTA service not available on device:', err);
             }
@@ -1084,9 +1086,11 @@ const BluetoothPage = (props: BluetoothProps) => {
                 commandCharacteristic: commandChar
             });
 
-            // Initialize OTA service for firmware updates
+            // Initialize OTA service for firmware updates (also fetches firmware version)
             try {
                 await bluetoothService.initFromServer(server);
+                const version = bluetoothService.getCurrentVersion();
+                setCurrentFirmwareVersion(version !== 'Unknown' ? version : null);
             } catch (err) {
                 console.warn('OTA service not available on device:', err);
             }
