@@ -1974,7 +1974,7 @@ const BluetoothPage = (props: BluetoothProps) => {
                                 }}>
                                     <div>
                                         <span style={{ fontSize: '14px', color: '#e0e0e0' }}>PIR Motion Sensor</span>
-                                        <span style={{ fontSize: '12px', color: '#888', marginLeft: '8px' }}>P0 · read-only</span>
+                                        <span style={{ fontSize: '12px', color: '#888', marginLeft: '8px' }}>GPIO 42 · read-only</span>
                                     </div>
                                     <span style={{
                                         display: 'inline-block',
