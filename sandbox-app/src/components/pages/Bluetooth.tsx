@@ -366,6 +366,7 @@ const BluetoothPage = (props: BluetoothProps) => {
     const [sprayOn, setSprayOn] = useState<boolean>(false);
     const [pirActive, setPirActive] = useState<boolean>(false);
     const [peripheralPending, setPeripheralPending] = useState<string | null>(null);
+    const [simulatePending, setSimulatePending] = useState<boolean>(false);
 
     // Firmware update state
     const [firmwareExpanded, setFirmwareExpanded] = useState<boolean>(false);
@@ -689,6 +690,15 @@ const BluetoothPage = (props: BluetoothProps) => {
                                     console.log('Auto-refreshing image list after photo capture');
                                 }
                             }
+                            // Handle simulate detection responses
+                            else if (responseJson.type === 'simulation_started') {
+                                console.log('Simulate detection: deterrent sequence started');
+                                setSimulatePending(true);
+                            }
+                            else if (responseJson.type === 'simulation_complete') {
+                                console.log('Simulate detection: deterrent sequence complete');
+                                setSimulatePending(false);
+                            }
                             // Handle settings response
                             else if (responseJson.type === 'settings') {
                                 console.log('Settings received:', responseJson);
@@ -998,6 +1008,12 @@ const BluetoothPage = (props: BluetoothProps) => {
                                     const encoder = new TextEncoder();
                                     commandChar.writeValue(encoder.encode(listCommand));
                                 }
+                            } else if (responseJson.type === 'simulation_started') {
+                                console.log('Simulate detection: deterrent sequence started');
+                                setSimulatePending(true);
+                            } else if (responseJson.type === 'simulation_complete') {
+                                console.log('Simulate detection: deterrent sequence complete');
+                                setSimulatePending(false);
                             }
                             // Handle settings response
                             else if (responseJson.type === 'settings') {
@@ -1106,6 +1122,19 @@ const BluetoothPage = (props: BluetoothProps) => {
             setPeripheralPending(null);
         }
     }, [connection.commandCharacteristic]);
+
+    // Send a simulate_detection command — runs the full deterrent sequence without capturing
+    const simulateDetection = useCallback(async () => {
+        if (!connection.commandCharacteristic || simulatePending) return;
+        try {
+            const command = JSON.stringify({ command: 'simulate_detection' });
+            await connection.commandCharacteristic.writeValue(new TextEncoder().encode(command));
+        } catch (err) {
+            console.error('Error sending simulate_detection:', err);
+            setError(`Failed to simulate detection: ${err}`);
+            setSimulatePending(false);
+        }
+    }, [connection.commandCharacteristic, simulatePending]);
 
     // Request current status
     const requestStatus = useCallback(async () => {
@@ -2023,7 +2052,7 @@ const BluetoothPage = (props: BluetoothProps) => {
                                 {/* Spray/Atomiser toggle */}
                                 <div style={{
                                     display: 'flex', alignItems: 'center',
-                                    justifyContent: 'space-between'
+                                    justifyContent: 'space-between', marginBottom: '14px'
                                 }}>
                                     <div>
                                         <span style={{ fontSize: '14px', color: '#e0e0e0' }}>Spray (Atomiser)</span>
@@ -2051,6 +2080,35 @@ const BluetoothPage = (props: BluetoothProps) => {
                                             }} />
                                         </span>
                                     </label>
+                                </div>
+
+                                {/* Simulate Boots Detection */}
+                                <div style={{
+                                    borderTop: '1px solid #444',
+                                    marginTop: '14px',
+                                    paddingTop: '14px'
+                                }}>
+                                    <div style={{ marginBottom: '6px' }}>
+                                        <span style={{ fontSize: '14px', color: '#e0e0e0' }}>Simulate Boots Detection</span>
+                                        <span style={{ fontSize: '12px', color: '#888', marginLeft: '8px' }}>no photo · no SageMaker</span>
+                                    </div>
+                                    <button
+                                        onClick={simulateDetection}
+                                        disabled={simulatePending}
+                                        style={{
+                                            padding: '8px 16px',
+                                            backgroundColor: simulatePending ? '#555' : '#e65100',
+                                            color: 'white',
+                                            border: 'none',
+                                            borderRadius: '4px',
+                                            cursor: simulatePending ? 'not-allowed' : 'pointer',
+                                            fontSize: '13px',
+                                            opacity: simulatePending ? 0.7 : 1,
+                                            transition: 'background-color 0.2s, opacity 0.2s'
+                                        }}
+                                    >
+                                        {simulatePending ? '⏳ Running (~10s)…' : '🐾 Trigger Deterrent Sequence'}
+                                    </button>
                                 </div>
                             </div>
                         )}
