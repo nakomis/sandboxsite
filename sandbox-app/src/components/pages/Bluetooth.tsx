@@ -315,6 +315,7 @@ const BluetoothPage = (props: BluetoothProps) => {
     const [selectedImage, setSelectedImage] = useState<string>("");
     const [isLoadingImages, setIsLoadingImages] = useState<boolean>(false);
     const [isLoadingImage, setIsLoadingImage] = useState<boolean>(false);
+    const [isTransferringImage, setIsTransferringImage] = useState<boolean>(false);
     const [currentImage, setCurrentImage] = useState<string | null>(null);
     const [currentMetadata, setCurrentMetadata] = useState<string | null>(null);
     const [imageChunks, setImageChunks] = useState<string[]>([]);
@@ -615,6 +616,7 @@ const BluetoothPage = (props: BluetoothProps) => {
                             // Handle image transfer start
                             else if (responseJson.type === 'image_start') {
                                 console.log(`Image transfer starting: ${responseJson.filename} (${responseJson.size} bytes)`);
+                                setIsTransferringImage(true);
                                 setImageChunks([]);
                                 setImageProgress({ current: 0, total: 0 });
                             }
@@ -626,6 +628,7 @@ const BluetoothPage = (props: BluetoothProps) => {
                             // Handle image transfer complete
                             else if (responseJson.type === 'image_complete') {
                                 console.log(`Image transfer complete: ${responseJson.chunks} chunks`);
+                                setIsTransferringImage(false);
                                 const filename = responseJson.filename;
                                 // Reassemble image from base64 chunks
                                 setImageChunks(chunks => {
@@ -954,12 +957,14 @@ const BluetoothPage = (props: BluetoothProps) => {
                                     return [];
                                 });
                             } else if (responseJson.type === 'image_start') {
+                                setIsTransferringImage(true);
                                 setImageChunks([]);
                                 setImageProgress({ current: 0, total: 0 });
                             } else if (responseJson.type === 'image_chunk') {
                                 setImageChunks(prev => [...prev, responseJson.data]);
                                 setImageProgress({ current: responseJson.chunk + 1, total: responseJson.total });
                             } else if (responseJson.type === 'image_complete') {
+                                setIsTransferringImage(false);
                                 const filename = responseJson.filename;
                                 setImageChunks(chunks => {
                                     const base64Data = chunks.join('');
@@ -2373,7 +2378,7 @@ const BluetoothPage = (props: BluetoothProps) => {
                                 id="image-select"
                                 value={selectedImage}
                                 onChange={handleImageSelect}
-                                disabled={isLoadingImage}
+                                disabled={isTransferringImage}
                                 style={{
                                     padding: '8px 12px',
                                     borderRadius: '4px',
