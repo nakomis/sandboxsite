@@ -115,7 +115,9 @@ const BootBootsPage = (props: BootBootProps) => {
                     />
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
                         <span style={{ color: '#9ca3af', fontSize: 12, fontFamily: 'monospace' }}>
-                            {currentRecord ? (parseImageDate(currentRecord.imageName) ?? '') : ''}
+                            {currentRecord
+                                ? (parseImageDate(currentRecord.imageName) ?? (currentRecord.imageName.split('/').pop() ?? currentRecord.imageName))
+                                : ''}
                         </span>
                         {localPrediction && badgeColour && (
                             <div style={{
