@@ -22,11 +22,19 @@ const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov
 
 function parseImageDate(imageName: string): string | null {
     const filename = imageName.split('/').pop() ?? '';
-    // Filename format: 2025-07-29T21-20-54-225Z.jpg
-    const m = filename.match(/^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})/);
-    if (!m) return null;
-    const date = new Date(`${m[1]}T${m[2]}:${m[3]}:${m[4]}Z`);
-    if (isNaN(date.getTime())) return null;
+    let date: Date | null = null;
+    // New format: 2026-03-30T09:57:53.552Z.jpg (real ISO timestamp)
+    const mNew = filename.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z)/);
+    if (mNew) {
+        date = new Date(mNew[1]);
+    } else {
+        // Old format: 2025-07-29T21-20-54-225Z.jpg (dashes instead of colons)
+        const mOld = filename.match(/^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})/);
+        if (mOld) {
+            date = new Date(`${mOld[1]}T${mOld[2]}:${mOld[3]}:${mOld[4]}Z`);
+        }
+    }
+    if (!date || isNaN(date.getTime())) return null;
     const dd = String(date.getDate()).padStart(2, '0');
     const mmm = MONTHS[date.getMonth()];
     const yy = String(date.getFullYear()).slice(2);
