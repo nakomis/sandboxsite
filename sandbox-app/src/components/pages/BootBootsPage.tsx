@@ -18,6 +18,24 @@ type BootBootProps = PageProps & {
     username: string | null;
 };
 
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+function parseImageDate(imageName: string): string | null {
+    const filename = imageName.split('/').pop() ?? '';
+    // Filename format: 2025-07-29T21-20-54-225Z.jpg
+    const m = filename.match(/^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})/);
+    if (!m) return null;
+    const date = new Date(`${m[1]}T${m[2]}:${m[3]}:${m[4]}Z`);
+    if (isNaN(date.getTime())) return null;
+    const dd = String(date.getDate()).padStart(2, '0');
+    const mmm = MONTHS[date.getMonth()];
+    const yy = String(date.getFullYear()).slice(2);
+    const HH = String(date.getHours()).padStart(2, '0');
+    const mm = String(date.getMinutes()).padStart(2, '0');
+    const ss = String(date.getSeconds()).padStart(2, '0');
+    return `${dd} ${mmm} ${yy} - ${HH}:${mm}:${ss}`;
+}
+
 const BootBootsPage = (props: BootBootProps) => {
     const [catadataRecords, setCatadataRecords] = useState<CatadataRecord[]>([]);
     var [currentRecord, setCurrentRecord] = useState<CatadataRecord | null>(null);
@@ -95,23 +113,26 @@ const BootBootsPage = (props: BootBootProps) => {
                             }, 50);
                         }}
                     />
-                    {localPrediction && badgeColour && (
-                        <div style={{
-                            alignSelf: 'flex-end',
-                            marginTop: 6,
-                            background: badgeColour,
-                            color: 'white',
-                            padding: '4px 10px',
-                            borderRadius: 6,
-                            fontSize: 13,
-                            fontWeight: 600,
-                            letterSpacing: '0.03em',
-                            pointerEvents: 'none',
-                            userSelect: 'none',
-                        }}>
-                            {localPrediction.prediction} {Math.round(localPrediction.confidence * 100)}%
-                        </div>
-                    )}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
+                        <span style={{ color: '#9ca3af', fontSize: 12, fontFamily: 'monospace' }}>
+                            {currentRecord ? (parseImageDate(currentRecord.imageName) ?? '') : ''}
+                        </span>
+                        {localPrediction && badgeColour && (
+                            <div style={{
+                                background: badgeColour,
+                                color: 'white',
+                                padding: '4px 10px',
+                                borderRadius: 6,
+                                fontSize: 13,
+                                fontWeight: 600,
+                                letterSpacing: '0.03em',
+                                pointerEvents: 'none',
+                                userSelect: 'none',
+                            }}>
+                                {localPrediction.prediction} {Math.round(localPrediction.confidence * 100)}%
+                            </div>
+                        )}
+                    </div>
                 </div>
             </div>
         )
