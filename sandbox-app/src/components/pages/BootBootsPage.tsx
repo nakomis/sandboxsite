@@ -18,6 +18,32 @@ type BootBootProps = PageProps & {
     username: string | null;
 };
 
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+function parseImageDate(imageName: string): string | null {
+    const filename = imageName.split('/').pop() ?? '';
+    let date: Date | null = null;
+    // New format: 2026-03-30T09:57:53.552Z.jpg (real ISO timestamp)
+    const mNew = filename.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?Z)/);
+    if (mNew) {
+        date = new Date(mNew[1]);
+    } else {
+        // Old format: 2025-07-29T21-20-54-225Z.jpg (dashes instead of colons)
+        const mOld = filename.match(/^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})/);
+        if (mOld) {
+            date = new Date(`${mOld[1]}T${mOld[2]}:${mOld[3]}:${mOld[4]}Z`);
+        }
+    }
+    if (!date || isNaN(date.getTime())) return null;
+    const dd = String(date.getDate()).padStart(2, '0');
+    const mmm = MONTHS[date.getMonth()];
+    const yy = String(date.getFullYear()).slice(2);
+    const HH = String(date.getHours()).padStart(2, '0');
+    const mm = String(date.getMinutes()).padStart(2, '0');
+    const ss = String(date.getSeconds()).padStart(2, '0');
+    return `${dd} ${mmm} ${yy} - ${HH}:${mm}:${ss}`;
+}
+
 const BootBootsPage = (props: BootBootProps) => {
     const [catadataRecords, setCatadataRecords] = useState<CatadataRecord[]>([]);
     var [currentRecord, setCurrentRecord] = useState<CatadataRecord | null>(null);
@@ -62,7 +88,7 @@ const BootBootsPage = (props: BootBootProps) => {
                 ? '#22c55e'   // green  — confident Boots, system would spray
                 : localPrediction.confidence < 0.85
                     ? '#f59e0b' // amber  — uncertain, system abstains
-                    : '#64748b' // slate  — confidently not Boots
+                    : '#1e3a8a' // navy   — confidently not Boots
             : null;
 
         const imgdiv = (
@@ -73,44 +99,51 @@ const BootBootsPage = (props: BootBootProps) => {
                 justifyContent: 'center',
                 minHeight: 0,
                 overflow: 'hidden',
-                position: 'relative',
             }}>
-                <img className="img-fluid"
-                    id="cat-image"
-                    src={`${catPicture}`}
-                    alt="Cat"
-                    style={{
-                        maxWidth: "100%",
-                        maxHeight: "100%",
-                        objectFit: "contain"
-                    }}
-                    onLoad={() => {
-                        setTimeout(function () {
-                            document.getElementById("outerdiv")!.style.width = "99%";
+                {/* inline-flex column: wrapper shrinks to image width, badge sits below right-aligned */}
+                <div style={{ display: 'inline-flex', flexDirection: 'column', maxWidth: '100%' }}>
+                    <img className="img-fluid"
+                        id="cat-image"
+                        src={`${catPicture}`}
+                        alt="Cat"
+                        style={{
+                            maxWidth: "100%",
+                            maxHeight: "calc(100vh - 390px)",
+                            objectFit: "contain",
+                            display: "block",
+                        }}
+                        onLoad={() => {
                             setTimeout(function () {
-                                document.getElementById("outerdiv")!.style.width = "100%";
+                                document.getElementById("outerdiv")!.style.width = "99%";
+                                setTimeout(function () {
+                                    document.getElementById("outerdiv")!.style.width = "100%";
+                                }, 50);
                             }, 50);
-                        }, 50);
-                    }}
-                />
-                {localPrediction && badgeColour && (
-                    <div style={{
-                        position: 'absolute',
-                        top: 8,
-                        right: 8,
-                        background: badgeColour,
-                        color: 'white',
-                        padding: '4px 10px',
-                        borderRadius: 6,
-                        fontSize: 13,
-                        fontWeight: 600,
-                        letterSpacing: '0.03em',
-                        pointerEvents: 'none',
-                        userSelect: 'none',
-                    }}>
-                        {localPrediction.prediction} {Math.round(localPrediction.confidence * 100)}%
+                        }}
+                    />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 }}>
+                        <span style={{ color: '#9ca3af', fontSize: 12, fontFamily: 'monospace' }}>
+                            {currentRecord
+                                ? (parseImageDate(currentRecord.imageName) ?? (currentRecord.imageName.split('/').pop() ?? currentRecord.imageName))
+                                : ''}
+                        </span>
+                        {localPrediction && badgeColour && (
+                            <div style={{
+                                background: badgeColour,
+                                color: 'white',
+                                padding: '4px 10px',
+                                borderRadius: 6,
+                                fontSize: 13,
+                                fontWeight: 600,
+                                letterSpacing: '0.03em',
+                                pointerEvents: 'none',
+                                userSelect: 'none',
+                            }}>
+                                {localPrediction.prediction} {Math.round(localPrediction.confidence * 100)}%
+                            </div>
+                        )}
                     </div>
-                )}
+                </div>
             </div>
         )
         return (
@@ -194,10 +227,30 @@ const BootBootsPage = (props: BootBootProps) => {
                             onClick={() => {
                                 clickCat("NoCat");
                             }}
-                            style={{ width: '200px', height: '100px', backgroundColor: '#3b4048ff', border: 'none', padding: 0, margin: 5 }}
+                            style={{ width: '100px', height: '100px', backgroundColor: '#3b4048ff', border: 'none', padding: 0, margin: 5 }}
                         >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" fill="currentColor" className="bi bi-trash-fill" viewBox="0 0 16 16">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="60" height="60" fill="currentColor" className="bi bi-trash-fill" viewBox="0 0 16 16">
                                 <path d="M2.5 1a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1H3v9a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V4h.5a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H10a1 1 0 0 0-1-1H7a1 1 0 0 0-1 1zm3 4a.5.5 0 0 1 .5.5v7a.5.5 0 0 1-1 0v-7a.5.5 0 0 1 .5-.5M8 5a.5.5 0 0 1 .5.5v7a.5.5 0 0 1-1 0v-7A.5.5 0 0 1 8 5m3 .5v7a.5.5 0 0 1-1 0v-7a.5.5 0 0 1 1 0" />
+                            </svg>
+                        </button>
+                        <button
+                            className="btn btn-primary"
+                            title="Multiple Cats (2)"
+                            onClick={() => {
+                                clickCat("Multi");
+                            }}
+                            style={{ width: '100px', height: '100px', backgroundColor: '#3b4048ff', border: 'none', padding: 0, margin: 5 }}
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 80 80" width="60" height="60" fill="currentColor">
+                                {/* Two overlapping cat-head silhouettes */}
+                                <g opacity="0.5">
+                                    <circle cx="50" cy="52" r="19" />
+                                    <polygon points="35,35 41,16 48,35" />
+                                    <polygon points="52,35 59,16 65,35" />
+                                </g>
+                                <circle cx="30" cy="52" r="19" />
+                                <polygon points="15,35 21,16 28,35" />
+                                <polygon points="32,35 39,16 45,35" />
                             </svg>
                         </button>
                     </div>
@@ -294,6 +347,9 @@ const BootBootsPage = (props: BootBootProps) => {
                 break;
             case "w":
                 clickCat("Wolf");
+                break;
+            case "2":
+                clickCat("Multi");
                 break;
             default:
                 console.log("Unhandled key:", event.key);
