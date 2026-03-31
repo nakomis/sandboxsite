@@ -74,17 +74,15 @@ const BootBootsPage = (props: BootBootProps) => {
                 minHeight: 0,
                 overflow: 'hidden',
             }}>
-                {/* Wrapper shrinks to the rendered image size so the badge sits on the image.
-                    maxHeight on the image uses a viewport calc rather than 100% because the
-                    wrapper has no explicit height for percentages to resolve against. */}
-                <div style={{ position: 'relative', lineHeight: 0 }}>
+                {/* inline-flex column: wrapper shrinks to image width, badge sits below right-aligned */}
+                <div style={{ display: 'inline-flex', flexDirection: 'column', maxWidth: '100%' }}>
                     <img className="img-fluid"
                         id="cat-image"
                         src={`${catPicture}`}
                         alt="Cat"
                         style={{
                             maxWidth: "100%",
-                            maxHeight: "calc(100vh - 350px)",
+                            maxHeight: "calc(100vh - 390px)",
                             objectFit: "contain",
                             display: "block",
                         }}
@@ -99,9 +97,8 @@ const BootBootsPage = (props: BootBootProps) => {
                     />
                     {localPrediction && badgeColour && (
                         <div style={{
-                            position: 'absolute',
-                            top: 8,
-                            right: 8,
+                            alignSelf: 'flex-end',
+                            marginTop: 6,
                             background: badgeColour,
                             color: 'white',
                             padding: '4px 10px',
