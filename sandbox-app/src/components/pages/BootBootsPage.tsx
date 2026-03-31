@@ -22,6 +22,7 @@ const BootBootsPage = (props: BootBootProps) => {
     const [catadataRecords, setCatadataRecords] = useState<CatadataRecord[]>([]);
     var [currentRecord, setCurrentRecord] = useState<CatadataRecord | null>(null);
     const [catPicture, setCatPicture] = useState<string | null>(null);
+    const [localPrediction, setLocalPrediction] = useState<{ prediction: string; confidence: number } | null>(null);
 
     function getCatReviewer() {
         if (!catPicture) {
@@ -56,6 +57,14 @@ const BootBootsPage = (props: BootBootProps) => {
             }
         }
 
+        const badgeColour = localPrediction
+            ? localPrediction.prediction === 'Boots' && localPrediction.confidence >= 0.85
+                ? '#22c55e'   // green  — confident Boots, system would spray
+                : localPrediction.confidence < 0.85
+                    ? '#f59e0b' // amber  — uncertain, system abstains
+                    : '#64748b' // slate  — confidently not Boots
+            : null;
+
         const imgdiv = (
             <div style={{
                 flex: 1,
@@ -63,7 +72,8 @@ const BootBootsPage = (props: BootBootProps) => {
                 alignItems: 'center',
                 justifyContent: 'center',
                 minHeight: 0,
-                overflow: 'hidden'
+                overflow: 'hidden',
+                position: 'relative',
             }}>
                 <img className="img-fluid"
                     id="cat-image"
@@ -83,6 +93,24 @@ const BootBootsPage = (props: BootBootProps) => {
                         }, 50);
                     }}
                 />
+                {localPrediction && badgeColour && (
+                    <div style={{
+                        position: 'absolute',
+                        top: 8,
+                        right: 8,
+                        background: badgeColour,
+                        color: 'white',
+                        padding: '4px 10px',
+                        borderRadius: 6,
+                        fontSize: 13,
+                        fontWeight: 600,
+                        letterSpacing: '0.03em',
+                        pointerEvents: 'none',
+                        userSelect: 'none',
+                    }}>
+                        {localPrediction.prediction} {Math.round(localPrediction.confidence * 100)}%
+                    </div>
+                )}
             </div>
         )
         return (
@@ -209,6 +237,7 @@ const BootBootsPage = (props: BootBootProps) => {
     useEffect(() => {
         if (currentRecord) {
             setCatPicture(null); // Clear the previous picture first
+            setLocalPrediction(null);
             (async () => {
                 const pic = await getCatPicture(props.creds!, currentRecord);
                 const url = await (new Response(pic)).blob().then(blob => {
@@ -218,6 +247,30 @@ const BootBootsPage = (props: BootBootProps) => {
             })();
         }
     }, [currentRecord]);
+
+    useEffect(() => {
+        if (!catPicture) return;
+        const controller = new AbortController();
+        (async () => {
+            try {
+                const blob = await fetch(catPicture).then(r => r.blob());
+                const arrayBuffer = await blob.arrayBuffer();
+                const response = await fetch('http://localhost:8765/predict', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/octet-stream' },
+                    body: arrayBuffer,
+                    signal: controller.signal,
+                });
+                if (response.ok) {
+                    const data = await response.json();
+                    setLocalPrediction(data);
+                }
+            } catch {
+                // Server not running or request cancelled — show nothing
+            }
+        })();
+        return () => controller.abort();
+    }, [catPicture]);
 
     function handleKeyUp(event: KeyboardEvent) {
         switch (event.key) {
