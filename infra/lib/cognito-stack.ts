@@ -136,6 +136,13 @@ export class CognitoStack extends cdk.Stack {
             resources: [`arn:aws:execute-api:${this.region}:${this.account}:*/*/GET/devices`],
         }));
 
+        // Grant execute-api permissions for BootBoots API (events endpoint)
+        this.userRole.addToPolicy(new iam.PolicyStatement({
+            effect: iam.Effect.ALLOW,
+            actions: ['execute-api:Invoke'],
+            resources: [`arn:aws:execute-api:${this.region}:${this.account}:*/*/GET/events`],
+        }));
+
         // Grant PCB Printer save/load permissions (optional)
         if (props.pcbPrinterBucket) {
             this.userRole.addToPolicy(new iam.PolicyStatement({

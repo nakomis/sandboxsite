@@ -26,7 +26,8 @@ export async function getEvents(
     const response = await signedFetch(url, credentials);
 
     if (!response.ok) {
-        throw new Error(`Events API error: ${response.status} ${response.statusText}`);
+        const body = await response.text().catch(() => '');
+        throw new Error(`Events API error: ${response.status} ${response.statusText}${body ? ` - ${body}` : ''}`);
     }
 
     return response.json();

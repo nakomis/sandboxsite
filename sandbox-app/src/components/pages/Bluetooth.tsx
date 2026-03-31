@@ -70,6 +70,18 @@ const FRAME_SIZE_OPTIONS: { value: number; label: string }[] = [
     { value: 13, label: 'UXGA (1600x1200)' },
 ];
 
+// Wraps a GATT promise with a timeout. Chrome caches GATT profiles and can hang
+// indefinitely on getPrimaryService() if the firmware has changed since last pairing.
+// Rejecting after a timeout allows us to detect stale cache and call device.forget().
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const withGattTimeout = <T = any>(promise: Promise<T>, timeoutMs = 10000): Promise<T> =>
+    Promise.race([
+        promise,
+        new Promise<T>((_, reject) =>
+            setTimeout(() => reject(new Error('gatt-timeout')), timeoutMs)
+        )
+    ]);
+
 // BootBoots BLE Service UUIDs (lowercase as required by Web Bluetooth API)
 const BOOTBOOTS_SERVICE_UUID = "bb00b007-5af3-41c3-9689-2fc7175c1ba8";
 const OTA_SERVICE_UUID = "99db6ea6-27e4-434d-aafd-795cf95feb06";
@@ -91,6 +103,7 @@ interface BootBootsSystemStatus {
         wifi_connected: boolean;
         sd_card_ready: boolean;
         i2c_ready: boolean;
+        pcf8574_ready: boolean;
         atomizer_enabled: boolean;
         training_mode: boolean;
     };
@@ -103,6 +116,12 @@ interface BootBootsSystemStatus {
     timing: {
         last_detection: number;
         last_status_report: number;
+    };
+    peripherals?: {
+        pir_active: boolean;
+        flash_led_on: boolean;
+        led_strip_on: boolean;
+        spray_on: boolean;
     };
 }
 
@@ -176,7 +195,7 @@ const CameraSlider = ({ label, value, min, max, setting, onChange, disabled }: {
                     type="range"
                     min={min}
                     max={max}
-                    value={value}
+                    value={value}   
                     onChange={(e) => onChange(setting, parseInt(e.target.value))}
                     disabled={disabled}
                     style={{ width: '120px', cursor: disabled ? 'wait' : 'pointer' }}
@@ -340,6 +359,15 @@ const BluetoothPage = (props: BluetoothProps) => {
     const [kappaStatus, setKappaStatus] = useState<KappaWarmerStatus | null>(null);
     const [kappaExpanded, setKappaExpanded] = useState<boolean>(true);
 
+    // Peripheral controls state (for hardware testing)
+    const [peripheralExpanded, setPeripheralExpanded] = useState<boolean>(true);
+    const [flashLedOn, setFlashLedOn] = useState<boolean>(false);
+    const [ledStripOn, setLedStripOn] = useState<boolean>(false);
+    const [sprayOn, setSprayOn] = useState<boolean>(false);
+    const [pirActive, setPirActive] = useState<boolean>(false);
+    const [peripheralPending, setPeripheralPending] = useState<string | null>(null);
+    const [simulatePending, setSimulatePending] = useState<boolean>(false);
+
     // Firmware update state
     const [firmwareExpanded, setFirmwareExpanded] = useState<boolean>(false);
     const [firmwareUpdateProgress, setFirmwareUpdateProgress] = useState<number | null>(null);
@@ -401,6 +429,14 @@ const BluetoothPage = (props: BluetoothProps) => {
                 setSystemStatus(status);
                 setLastUpdate(new Date());
                 setError(null);
+
+                // Sync peripheral state from live device readings
+                if (status.peripherals) {
+                    setPirActive(status.peripherals.pir_active);
+                    setFlashLedOn(status.peripherals.flash_led_on);
+                    setLedStripOn(status.peripherals.led_strip_on);
+                    setSprayOn(status.peripherals.spray_on);
+                }
             }
         } catch (err) {
             console.error('Error parsing status update:', err);
@@ -410,12 +446,13 @@ const BluetoothPage = (props: BluetoothProps) => {
 
     // Connect to BootBoots device
     const connectToBootBoots = useCallback(async () => {
+        let device: BluetoothDevice | undefined;
         try {
             setConnectionStatus("Connecting...");
             setError(null);
 
             // Request device - filter by service UUID for reliable discovery of Nakomis ESP32 devices
-            const device = await navigator.bluetooth.requestDevice({
+            device = await navigator.bluetooth.requestDevice({
                 filters: [
                     { services: [BOOTBOOTS_SERVICE_UUID] }
                 ],
@@ -437,13 +474,14 @@ const BluetoothPage = (props: BluetoothProps) => {
             const server = await device.gatt!.connect();
             console.log('Connected to GATT Server');
 
-            // Get primary service
-            const service = await server.getPrimaryService(BOOTBOOTS_SERVICE_UUID);
+            // Get primary service — wrapped in a timeout to detect stale GATT cache
+            // (Chrome caches GATT profiles; a firmware update can cause getPrimaryService to hang)
+            const service = await withGattTimeout(server.getPrimaryService(BOOTBOOTS_SERVICE_UUID));
             console.log('Got service');
 
             // Get characteristics (logs is optional - Kappa-Warmer doesn't have it)
-            const statusChar = await service.getCharacteristic(STATUS_CHARACTERISTIC_UUID);
-            const commandChar = await service.getCharacteristic(COMMAND_CHARACTERISTIC_UUID);
+            const statusChar = await withGattTimeout(service.getCharacteristic(STATUS_CHARACTERISTIC_UUID));
+            const commandChar = await withGattTimeout(service.getCharacteristic(COMMAND_CHARACTERISTIC_UUID));
 
             // Try to get logs characteristic (optional)
             let logsChar: BluetoothRemoteGATTCharacteristic | null = null;
@@ -652,10 +690,23 @@ const BluetoothPage = (props: BluetoothProps) => {
                                     console.log('Auto-refreshing image list after photo capture');
                                 }
                             }
+                            // Handle simulate detection responses
+                            else if (responseJson.type === 'simulation_started') {
+                                console.log('Simulate detection: deterrent sequence started');
+                                setSimulatePending(true);
+                            }
+                            else if (responseJson.type === 'simulation_complete') {
+                                console.log('Simulate detection: deterrent sequence complete');
+                                setSimulatePending(false);
+                            }
                             // Handle settings response
                             else if (responseJson.type === 'settings') {
                                 console.log('Settings received:', responseJson);
                                 setTrainingMode(responseJson.training_mode || false);
+                            }
+                            // Handle camera settings response
+                            else if (responseJson.type === 'camera_settings') {
+                                console.log('Camera settings received:', responseJson);
                                 if (responseJson.camera) {
                                     setCameraSettings(prev => ({ ...prev, ...responseJson.camera }));
                                 }
@@ -684,6 +735,14 @@ const BluetoothPage = (props: BluetoothProps) => {
                                 setLogData("");
                                 setLastUpdate(null);
                             }
+                            // Handle peripheral control acknowledgement
+                            else if (responseJson.type === 'peripheral_updated') {
+                                const { peripheral, state: pState } = responseJson;
+                                if (peripheral === 'flash_led') setFlashLedOn(pState);
+                                else if (peripheral === 'led_strip') setLedStripOn(pState);
+                                else if (peripheral === 'spray') setSprayOn(pState);
+                                setPeripheralPending(null);
+                            }
                             // Handle Kappa-Warmer status response
                             else if (responseJson.type === 'status' && responseJson.device === 'Kappa-Warmer') {
                                 console.log('Kappa-Warmer status received:', responseJson);
@@ -710,9 +769,11 @@ const BluetoothPage = (props: BluetoothProps) => {
                 commandCharacteristic: commandChar
             });
 
-            // Initialize OTA service for firmware updates
+            // Initialize OTA service for firmware updates (also fetches firmware version)
             try {
                 await bluetoothService.initFromServer(server);
+                const version = bluetoothService.getCurrentVersion();
+                setCurrentFirmwareVersion(version !== 'Unknown' ? version : null);
             } catch (err) {
                 console.warn('OTA service not available on device:', err);
             }
@@ -735,7 +796,14 @@ const BluetoothPage = (props: BluetoothProps) => {
 
         } catch (err) {
             console.error('Error connecting to BootBoots:', err);
-            setError(`Connection failed: ${err}`);
+            const isTimeout = err instanceof Error && err.message === 'gatt-timeout';
+            if (isTimeout && device) {
+                try { await device.forget(); } catch { /* forget() not available in all browsers */ }
+                setPairedDevices(prev => prev.filter(d => d.id !== device!.id));
+                setError('Service discovery timed out — the device profile was stale after a firmware update. The device has been forgotten; please reconnect.');
+            } else {
+                setError(`Connection failed: ${err}`);
+            }
             setConnectionStatus("Disconnected");
         }
     }, [handleStatusUpdate]);
@@ -760,6 +828,13 @@ const BluetoothPage = (props: BluetoothProps) => {
         setLastUpdate(null);
     }, [connection.server]);
 
+    // Forget a paired device — clears Chrome's GATT cache so the next connection does
+    // fresh service discovery. Useful after a firmware update changes the GATT profile.
+    const forgetDevice = useCallback(async (device: BluetoothDevice) => {
+        try { await device.forget(); } catch { /* forget() not available in all browsers */ }
+        setPairedDevices(prev => prev.filter(d => d.id !== device.id));
+    }, []);
+
     // Reconnect to a previously paired device
     const reconnectToDevice = useCallback(async (device: BluetoothDevice) => {
         try {
@@ -782,13 +857,13 @@ const BluetoothPage = (props: BluetoothProps) => {
             const server = await device.gatt!.connect();
             console.log('Reconnected to GATT Server');
 
-            // Get primary service
-            const service = await server.getPrimaryService(BOOTBOOTS_SERVICE_UUID);
+            // Get primary service — wrapped in a timeout to detect stale GATT cache
+            const service = await withGattTimeout(server.getPrimaryService(BOOTBOOTS_SERVICE_UUID));
             console.log('Got service');
 
             // Get characteristics (logs is optional - Kappa-Warmer doesn't have it)
-            const statusChar = await service.getCharacteristic(STATUS_CHARACTERISTIC_UUID);
-            const commandChar = await service.getCharacteristic(COMMAND_CHARACTERISTIC_UUID);
+            const statusChar = await withGattTimeout(service.getCharacteristic(STATUS_CHARACTERISTIC_UUID));
+            const commandChar = await withGattTimeout(service.getCharacteristic(COMMAND_CHARACTERISTIC_UUID));
 
             // Try to get logs characteristic (optional)
             let logsChar: BluetoothRemoteGATTCharacteristic | null = null;
@@ -935,11 +1010,21 @@ const BluetoothPage = (props: BluetoothProps) => {
                                     const encoder = new TextEncoder();
                                     commandChar.writeValue(encoder.encode(listCommand));
                                 }
+                            } else if (responseJson.type === 'simulation_started') {
+                                console.log('Simulate detection: deterrent sequence started');
+                                setSimulatePending(true);
+                            } else if (responseJson.type === 'simulation_complete') {
+                                console.log('Simulate detection: deterrent sequence complete');
+                                setSimulatePending(false);
                             }
                             // Handle settings response
                             else if (responseJson.type === 'settings') {
                                 console.log('Settings received:', responseJson);
                                 setTrainingMode(responseJson.training_mode || false);
+                            }
+                            // Handle camera settings response
+                            else if (responseJson.type === 'camera_settings') {
+                                console.log('Camera settings received:', responseJson);
                                 if (responseJson.camera) {
                                     setCameraSettings(prev => ({ ...prev, ...responseJson.camera }));
                                 }
@@ -968,6 +1053,14 @@ const BluetoothPage = (props: BluetoothProps) => {
                                 setLogData("");
                                 setLastUpdate(null);
                             }
+                            // Handle peripheral control acknowledgement
+                            else if (responseJson.type === 'peripheral_updated') {
+                                const { peripheral, state: pState } = responseJson;
+                                if (peripheral === 'flash_led') setFlashLedOn(pState);
+                                else if (peripheral === 'led_strip') setLedStripOn(pState);
+                                else if (peripheral === 'spray') setSprayOn(pState);
+                                setPeripheralPending(null);
+                            }
                             // Handle Kappa-Warmer status response
                             else if (responseJson.type === 'status' && responseJson.device === 'Kappa-Warmer') {
                                 console.log('Kappa-Warmer status received:', responseJson);
@@ -993,9 +1086,11 @@ const BluetoothPage = (props: BluetoothProps) => {
                 commandCharacteristic: commandChar
             });
 
-            // Initialize OTA service for firmware updates
+            // Initialize OTA service for firmware updates (also fetches firmware version)
             try {
                 await bluetoothService.initFromServer(server);
+                const version = bluetoothService.getCurrentVersion();
+                setCurrentFirmwareVersion(version !== 'Unknown' ? version : null);
             } catch (err) {
                 console.warn('OTA service not available on device:', err);
             }
@@ -1005,11 +1100,45 @@ const BluetoothPage = (props: BluetoothProps) => {
 
         } catch (err) {
             console.error('Error reconnecting:', err);
-            setError(`Reconnection failed: ${err}`);
+            const isTimeout = err instanceof Error && err.message === 'gatt-timeout';
+            if (isTimeout) {
+                try { await device.forget(); } catch { /* forget() not available in all browsers */ }
+                setPairedDevices(prev => prev.filter(d => d.id !== device.id));
+                setError('Service discovery timed out — the device profile was stale after a firmware update. The device has been forgotten; please reconnect.');
+            } else {
+                setError(`Reconnection failed: ${err}`);
+            }
             setConnectionStatus("Disconnected");
             setIsReconnecting(false);
         }
     }, [handleStatusUpdate]);
+
+    // Send a set_peripheral command to toggle a PCF8574-connected peripheral
+    const setPeripheralState = useCallback(async (peripheral: string, state: boolean) => {
+        if (!connection.commandCharacteristic) return;
+        setPeripheralPending(peripheral);
+        try {
+            const command = JSON.stringify({ command: 'set_peripheral', peripheral, state });
+            await connection.commandCharacteristic.writeValue(new TextEncoder().encode(command));
+        } catch (err) {
+            console.error('Error sending set_peripheral:', err);
+            setError(`Failed to control peripheral: ${err}`);
+            setPeripheralPending(null);
+        }
+    }, [connection.commandCharacteristic]);
+
+    // Send a simulate_detection command — runs the full deterrent sequence without capturing
+    const simulateDetection = useCallback(async () => {
+        if (!connection.commandCharacteristic || simulatePending) return;
+        try {
+            const command = JSON.stringify({ command: 'simulate_detection' });
+            await connection.commandCharacteristic.writeValue(new TextEncoder().encode(command));
+        } catch (err) {
+            console.error('Error sending simulate_detection:', err);
+            setError(`Failed to simulate detection: ${err}`);
+            setSimulatePending(false);
+        }
+    }, [connection.commandCharacteristic, simulatePending]);
 
     // Request current status
     const requestStatus = useCallback(async () => {
@@ -1179,10 +1308,11 @@ const BluetoothPage = (props: BluetoothProps) => {
         if (!connection.commandCharacteristic) return;
 
         try {
-            const command = JSON.stringify({ command: "get_settings" });
             const encoder = new TextEncoder();
-            await connection.commandCharacteristic.writeValue(encoder.encode(command));
+            await connection.commandCharacteristic.writeValue(encoder.encode(JSON.stringify({ command: "get_settings" })));
             console.log('Sent get_settings command');
+            await connection.commandCharacteristic.writeValue(encoder.encode(JSON.stringify({ command: "get_camera_settings" })));
+            console.log('Sent get_camera_settings command');
         } catch (err) {
             console.error('Error requesting settings:', err);
             setError(`Failed to request settings: ${err}`);
@@ -1423,16 +1553,25 @@ const BluetoothPage = (props: BluetoothProps) => {
                                         <strong>Previously paired devices:</strong>
                                     </p>
                                     {pairedDevices.map((device) => (
-                                        <button
-                                            key={device.id}
-                                            type="button"
-                                            className="btn btn-outline-primary"
-                                            onClick={() => reconnectToDevice(device)}
-                                            disabled={isReconnecting}
-                                            style={{ marginRight: '10px', marginBottom: '5px' }}
-                                        >
-                                            {isReconnecting ? "Reconnecting..." : `Reconnect to ${device.name}`}
-                                        </button>
+                                        <span key={device.id} style={{ display: 'inline-flex', gap: '4px', marginRight: '10px', marginBottom: '5px' }}>
+                                            <button
+                                                type="button"
+                                                className="btn btn-outline-primary"
+                                                onClick={() => reconnectToDevice(device)}
+                                                disabled={isReconnecting}
+                                            >
+                                                {isReconnecting ? "Reconnecting..." : `Reconnect to ${device.name}`}
+                                            </button>
+                                            <button
+                                                type="button"
+                                                className="btn btn-outline-secondary"
+                                                onClick={() => forgetDevice(device)}
+                                                disabled={isReconnecting}
+                                                title="Forget device — clears cached GATT profile. Use this if reconnection hangs after a firmware update."
+                                            >
+                                                Forget
+                                            </button>
+                                        </span>
                                     ))}
                                 </div>
                             )}
@@ -1794,6 +1933,187 @@ const BluetoothPage = (props: BluetoothProps) => {
                                         </button>
                                     </div>
                                 )}
+                            </div>
+                        )}
+                    </div>
+                )}
+
+                {/* Peripheral Controls (hardware test panel — BootBoots only) */}
+                {connection.device && deviceType === 'bootboots' && (
+                    <div style={{ marginTop: '20px' }}>
+                        <div
+                            onClick={() => setPeripheralExpanded(!peripheralExpanded)}
+                            style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', marginBottom: '10px' }}
+                        >
+                            <span style={{
+                                transform: peripheralExpanded ? 'rotate(90deg)' : 'rotate(0deg)',
+                                transition: 'transform 0.2s',
+                                marginRight: '8px',
+                                fontSize: '14px'
+                            }}>▶</span>
+                            <h3 style={{ margin: 0 }}>Peripheral Controls</h3>
+                        </div>
+
+                        {peripheralExpanded && (
+                            <div style={{
+                                border: '1px solid #444',
+                                borderRadius: '8px',
+                                padding: '15px',
+                                backgroundColor: '#282c34'
+                            }}>
+                                {systemStatus && !systemStatus.system.pcf8574_ready && (
+                                    <p style={{ color: '#ff9800', fontSize: '13px', marginBottom: '12px' }}>
+                                        PCF8574 not ready — check I2C connections
+                                    </p>
+                                )}
+
+                                {/* PIR Sensor — read-only indicator */}
+                                <div style={{
+                                    display: 'flex', alignItems: 'center',
+                                    justifyContent: 'space-between', marginBottom: '14px'
+                                }}>
+                                    <div>
+                                        <span style={{ fontSize: '14px', color: '#e0e0e0' }}>PIR Motion Sensor</span>
+                                        <span style={{ fontSize: '12px', color: '#888', marginLeft: '8px' }}>P0 · read-only</span>
+                                    </div>
+                                    <span style={{
+                                        display: 'inline-block',
+                                        width: '14px', height: '14px',
+                                        borderRadius: '50%',
+                                        backgroundColor: pirActive ? '#4CAF50' : '#555',
+                                        boxShadow: pirActive ? '0 0 6px #4CAF50' : 'none',
+                                        transition: 'background-color 0.2s, box-shadow 0.2s',
+                                        flexShrink: 0
+                                    }} title={pirActive ? 'Motion detected' : 'No motion'} />
+                                </div>
+
+                                {/* Flash LED toggle */}
+                                <div style={{
+                                    display: 'flex', alignItems: 'center',
+                                    justifyContent: 'space-between', marginBottom: '14px'
+                                }}>
+                                    <div>
+                                        <span style={{ fontSize: '14px', color: '#e0e0e0' }}>Flash LED</span>
+                                        <span style={{ fontSize: '12px', color: '#888', marginLeft: '8px' }}>P7</span>
+                                    </div>
+                                    <label style={{ position: 'relative', display: 'inline-block', width: '44px', height: '24px', flexShrink: 0 }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={flashLedOn}
+                                            disabled={systemStatus && !systemStatus.system.pcf8574_ready || peripheralPending === 'flash_led'}
+                                            onChange={() => setPeripheralState('flash_led', !flashLedOn)}
+                                            style={{ opacity: 0, width: 0, height: 0 }}
+                                        />
+                                        <span style={{
+                                            position: 'absolute', cursor: systemStatus && !systemStatus.system.pcf8574_ready ? 'not-allowed' : 'pointer',
+                                            top: 0, left: 0, right: 0, bottom: 0,
+                                            backgroundColor: flashLedOn ? '#4CAF50' : '#555',
+                                            opacity: peripheralPending === 'flash_led' ? 0.6 : 1,
+                                            transition: '0.3s', borderRadius: '24px'
+                                        }}>
+                                            <span style={{
+                                                position: 'absolute', height: '18px', width: '18px',
+                                                left: flashLedOn ? '23px' : '3px', bottom: '3px',
+                                                backgroundColor: 'white', transition: '0.3s', borderRadius: '50%'
+                                            }} />
+                                        </span>
+                                    </label>
+                                </div>
+
+                                {/* LED Strip toggle */}
+                                <div style={{
+                                    display: 'flex', alignItems: 'center',
+                                    justifyContent: 'space-between', marginBottom: '14px'
+                                }}>
+                                    <div>
+                                        <span style={{ fontSize: '14px', color: '#e0e0e0' }}>LED Strip</span>
+                                        <span style={{ fontSize: '12px', color: '#888', marginLeft: '8px' }}>P5+P6</span>
+                                    </div>
+                                    <label style={{ position: 'relative', display: 'inline-block', width: '44px', height: '24px', flexShrink: 0 }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={ledStripOn}
+                                            disabled={systemStatus && !systemStatus.system.pcf8574_ready || peripheralPending === 'led_strip'}
+                                            onChange={() => setPeripheralState('led_strip', !ledStripOn)}
+                                            style={{ opacity: 0, width: 0, height: 0 }}
+                                        />
+                                        <span style={{
+                                            position: 'absolute', cursor: systemStatus && !systemStatus.system.pcf8574_ready ? 'not-allowed' : 'pointer',
+                                            top: 0, left: 0, right: 0, bottom: 0,
+                                            backgroundColor: ledStripOn ? '#4CAF50' : '#555',
+                                            opacity: peripheralPending === 'led_strip' ? 0.6 : 1,
+                                            transition: '0.3s', borderRadius: '24px'
+                                        }}>
+                                            <span style={{
+                                                position: 'absolute', height: '18px', width: '18px',
+                                                left: ledStripOn ? '23px' : '3px', bottom: '3px',
+                                                backgroundColor: 'white', transition: '0.3s', borderRadius: '50%'
+                                            }} />
+                                        </span>
+                                    </label>
+                                </div>
+
+                                {/* Spray/Atomiser toggle */}
+                                <div style={{
+                                    display: 'flex', alignItems: 'center',
+                                    justifyContent: 'space-between', marginBottom: '14px'
+                                }}>
+                                    <div>
+                                        <span style={{ fontSize: '14px', color: '#e0e0e0' }}>Spray (Atomiser)</span>
+                                        <span style={{ fontSize: '12px', color: '#888', marginLeft: '8px' }}>P3</span>
+                                    </div>
+                                    <label style={{ position: 'relative', display: 'inline-block', width: '44px', height: '24px', flexShrink: 0 }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={sprayOn}
+                                            disabled={systemStatus && !systemStatus.system.pcf8574_ready || peripheralPending === 'spray'}
+                                            onChange={() => setPeripheralState('spray', !sprayOn)}
+                                            style={{ opacity: 0, width: 0, height: 0 }}
+                                        />
+                                        <span style={{
+                                            position: 'absolute', cursor: systemStatus && !systemStatus.system.pcf8574_ready ? 'not-allowed' : 'pointer',
+                                            top: 0, left: 0, right: 0, bottom: 0,
+                                            backgroundColor: sprayOn ? '#f44336' : '#555',
+                                            opacity: peripheralPending === 'spray' ? 0.6 : 1,
+                                            transition: '0.3s', borderRadius: '24px'
+                                        }}>
+                                            <span style={{
+                                                position: 'absolute', height: '18px', width: '18px',
+                                                left: sprayOn ? '23px' : '3px', bottom: '3px',
+                                                backgroundColor: 'white', transition: '0.3s', borderRadius: '50%'
+                                            }} />
+                                        </span>
+                                    </label>
+                                </div>
+
+                                {/* Simulate Boots Detection */}
+                                <div style={{
+                                    borderTop: '1px solid #444',
+                                    marginTop: '14px',
+                                    paddingTop: '14px'
+                                }}>
+                                    <div style={{ marginBottom: '6px' }}>
+                                        <span style={{ fontSize: '14px', color: '#e0e0e0' }}>Simulate Boots Detection</span>
+                                        <span style={{ fontSize: '12px', color: '#888', marginLeft: '8px' }}>no photo · no SageMaker</span>
+                                    </div>
+                                    <button
+                                        onClick={simulateDetection}
+                                        disabled={simulatePending}
+                                        style={{
+                                            padding: '8px 16px',
+                                            backgroundColor: simulatePending ? '#555' : '#e65100',
+                                            color: 'white',
+                                            border: 'none',
+                                            borderRadius: '4px',
+                                            cursor: simulatePending ? 'not-allowed' : 'pointer',
+                                            fontSize: '13px',
+                                            opacity: simulatePending ? 0.7 : 1,
+                                            transition: 'background-color 0.2s, opacity 0.2s'
+                                        }}
+                                    >
+                                        {simulatePending ? '⏳ Running (~10s)…' : '🐾 Trigger Deterrent Sequence'}
+                                    </button>
+                                </div>
                             </div>
                         )}
                     </div>
