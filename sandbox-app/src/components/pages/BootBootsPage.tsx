@@ -74,15 +74,17 @@ const BootBootsPage = (props: BootBootProps) => {
                 minHeight: 0,
                 overflow: 'hidden',
             }}>
-                {/* Wrapper shrinks to the rendered image size so the badge sits on the image */}
-                <div style={{ position: 'relative', maxWidth: '100%', maxHeight: '100%' }}>
+                {/* Wrapper shrinks to the rendered image size so the badge sits on the image.
+                    maxHeight on the image uses a viewport calc rather than 100% because the
+                    wrapper has no explicit height for percentages to resolve against. */}
+                <div style={{ position: 'relative', lineHeight: 0 }}>
                     <img className="img-fluid"
                         id="cat-image"
                         src={`${catPicture}`}
                         alt="Cat"
                         style={{
                             maxWidth: "100%",
-                            maxHeight: "100%",
+                            maxHeight: "calc(100vh - 350px)",
                             objectFit: "contain",
                             display: "block",
                         }}
