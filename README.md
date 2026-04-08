@@ -2,6 +2,12 @@
 
 BootBoots sandbox — React frontend (`sandbox-app`) + AWS CDK infrastructure (`infra`).
 
+## Support
+
+If you find this useful, please consider buying me a coffee:
+
+[![Donate with PayPal](https://www.paypalobjects.com/en_GB/i/btn/btn_donate_SM.gif)](https://www.paypal.com/donate?hosted_button_id=Q3BESC73EWVNN)
+
 ## Versioning
 
 Both the app and infra are versioned independently using `version.json` files with `-SNAPSHOT` suffixes between releases. Versions are visible in the app footer alongside the pcbprinter library version.
