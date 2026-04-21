@@ -19,5 +19,8 @@
         "bucket": "<PCB_PRINTER_BUCKET>",
         "table": "<PCB_PRINTER_TABLE>"
     },
-    "allowedIps": []
+    "allowedIps": [],
+    "sam": {
+        "serverUrl": "<SAM_SERVER_URL>"
+    }
 }
