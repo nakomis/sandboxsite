@@ -147,6 +147,7 @@ export default function CatBoundingPage({ tabId, index, creds, username }: Props
     const [samLoading, setSamLoading] = useState(false);
     const [samError, setSamError] = useState<string | null>(null);
     const [recordLoading, setRecordLoading] = useState(false);
+    const [recordError, setRecordError] = useState<string | null>(null);
     const [saving, setSaving] = useState(false);
 
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -213,14 +214,17 @@ export default function CatBoundingPage({ tabId, index, creds, username }: Props
     };
 
     const loadNextRecord = async (cat: string) => {
-        if (!creds || !username) return;
+        if (!creds || !username) {
+            setRecordError(!creds ? 'No AWS credentials — try refreshing the page.' : 'No username found in your session profile.');
+            return;
+        }
         setRecordLoading(true);
+        setRecordError(null);
         clearAnnotation();
         try {
             const record = await claimNextUnbounded(creds, cat, username);
             if (!record) {
                 setCurrentRecord(null);
-                setRecordLoading(false);
                 return;
             }
             setCurrentRecord(record);
@@ -228,8 +232,9 @@ export default function CatBoundingPage({ tabId, index, creds, username }: Props
             const url = URL.createObjectURL(blob);
             setImageBlob(blob);
             setImageUrl(url);
-        } catch (err) {
+        } catch (err: any) {
             console.error('Failed to load record:', err);
+            setRecordError(err?.message ?? String(err));
         } finally {
             setRecordLoading(false);
         }
@@ -361,7 +366,7 @@ export default function CatBoundingPage({ tabId, index, creds, username }: Props
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                 <button
                     style={btnStyle('#555')}
-                    onClick={() => { setView('overview'); clearAnnotation(); }}
+                    onClick={() => { setView('overview'); clearAnnotation(); setRecordError(null); setCurrentRecord(null); }}
                 >
                     ← Overview
                 </button>
@@ -391,7 +396,10 @@ export default function CatBoundingPage({ tabId, index, creds, username }: Props
                 {recordLoading && (
                     <p style={{ color: '#aaa' }}>Loading image…</p>
                 )}
-                {!recordLoading && !currentRecord && (
+                {!recordLoading && recordError && (
+                    <p style={{ color: '#f88' }}>Error: {recordError}</p>
+                )}
+                {!recordLoading && !currentRecord && !recordError && (
                     <p style={{ color: '#aaa' }}>
                         All {selectedCat} images are bounded! 🎉
                     </p>
