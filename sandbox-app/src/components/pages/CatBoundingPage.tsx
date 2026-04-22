@@ -418,6 +418,11 @@ export default function CatBoundingPage({ tabId, index, creds, username }: Props
                     ← Overview
                 </button>
                 <span style={{ fontWeight: 'bold', fontSize: 18 }}>{selectedCat}</span>
+                {selectedCat && stats[selectedCat] && (
+                    <span style={{ color: '#aaa', fontSize: 14 }}>
+                        {stats[selectedCat].bounded}/{stats[selectedCat].sorted}
+                    </span>
+                )}
                 {samLoading && <span style={{ color: '#aaa', fontSize: 14 }}>Segmenting…</span>}
                 {samError && <span style={{ color: '#f66', fontSize: 14 }}>{samError}</span>}
             </div>
