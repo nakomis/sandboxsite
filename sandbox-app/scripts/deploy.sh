@@ -7,12 +7,17 @@ REPO_DIR="$(dirname "$APP_DIR")"
 
 # --- Parse flags ---
 BUMP="patch"
+ENV="sandbox"
 for arg in "$@"; do
   case "$arg" in
     --major) BUMP="major" ;;
     --minor) BUMP="minor" ;;
+    --env=*) ENV="${arg#--env=}" ;;
   esac
 done
+
+export AWS_PROFILE="nakom.is-${ENV}"
+echo "Using AWS profile: $AWS_PROFILE"
 
 # --- Read current version ---
 VERSION_FILE="$APP_DIR/src/version.json"
@@ -55,7 +60,7 @@ echo "{ \"version\": \"$RELEASE_VERSION\" }" > "$VERSION_FILE"
 # --- Build ---
 echo "Building sandbox-app..."
 cd "$APP_DIR"
-AWS_PROFILE=nakom.is-sandbox ./scripts/set-config.sh sandbox
+./scripts/set-config.sh "$ENV"
 npm install
 npm run build
 
