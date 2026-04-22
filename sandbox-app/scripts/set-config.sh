@@ -73,4 +73,16 @@ setValue bucket "$PCB_PRINTER_BUCKET"
 PCB_PRINTER_TABLE=$(aws cloudformation describe-stacks --stack-name SandboxPcbPrinterStack --query "Stacks[0].Outputs[?OutputKey=='PcbPrinterTableName'].OutputValue" --output text)
 setValue table "$PCB_PRINTER_TABLE"
 
+# SAM 2 segmentation server
+# localhost: proxied through the webpack dev server (avoids CORS/service-worker issues)
+# sandbox: direct to phi.local — requires the SAM server to be running on the same LAN
+case $ENV in
+    localhost)
+        setValue serverUrl "/sam"
+        ;;
+    sandbox)
+        setValue serverUrl "https://phi.nasbox.nakomis.com:7861"
+        ;;
+esac
+
 rm -f $SCRIPT_DIR/../src/config/config.json.bk

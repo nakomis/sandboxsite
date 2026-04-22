@@ -20,6 +20,7 @@ import HomePage from './pages/HomePage';
 import BluetoothPage from './pages/Bluetooth';
 import MQTTPage from './pages/MQTT';
 import BootBootsPage from './pages/BootBootsPage';
+import CatBoundingPage from './pages/CatBoundingPage';
 import EventsPage from './pages/Events';
 import PCBPrinterPage from './pages/PCBPrinterPage';
 import Footer from './Footer';
@@ -159,6 +160,7 @@ const App: React.FC = () => {
                                             <Tab label="Bluetooth" />
                                             <Tab label="MQTT" />
                                             <Tab label="Cat Labeling" />
+                                            <Tab label="Cat Bounding" />
                                             <Tab label="Catches" />
                                             <Tab label="PCB Printer" />
                                         </Tabs>
@@ -175,9 +177,10 @@ const App: React.FC = () => {
                                 <HomePage tabId={tabId} index={0} creds={creds}></HomePage>
                                 <BluetoothPage tabId={tabId} index={1} creds={creds}></BluetoothPage>
                                 <MQTTPage tabId={tabId} index={2} creds={creds}></MQTTPage>
-                                <BootBootsPage tabId={tabId} index={3} creds={creds} username={auth.user?.profile?.preferred_username || null}></BootBootsPage>
-                                <EventsPage tabId={tabId} index={4} creds={creds}></EventsPage>
-                                <PCBPrinterPage tabId={tabId} index={5} creds={creds}></PCBPrinterPage>
+                                <BootBootsPage tabId={tabId} index={3} creds={creds} username={auth.user?.profile?.preferred_username || auth.user?.profile?.sub || null}></BootBootsPage>
+                                <CatBoundingPage tabId={tabId} index={4} creds={creds} username={auth.user?.profile?.preferred_username || auth.user?.profile?.sub || null}></CatBoundingPage>
+                                <EventsPage tabId={tabId} index={5} creds={creds}></EventsPage>
+                                <PCBPrinterPage tabId={tabId} index={6} creds={creds}></PCBPrinterPage>
                             </Box>
                         </ThemeProvider>
                         {
