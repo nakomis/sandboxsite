@@ -73,4 +73,11 @@ setValue bucket "$PCB_PRINTER_BUCKET"
 PCB_PRINTER_TABLE=$(aws cloudformation describe-stacks --stack-name SandboxPcbPrinterStack --query "Stacks[0].Outputs[?OutputKey=='PcbPrinterTableName'].OutputValue" --output text)
 setValue table "$PCB_PRINTER_TABLE"
 
+# SAM 2 segmentation server (local only — proxied through dev server; set manually for deployed envs)
+case $ENV in
+    localhost)
+        setValue serverUrl "/sam"
+        ;;
+esac
+
 rm -f $SCRIPT_DIR/../src/config/config.json.bk

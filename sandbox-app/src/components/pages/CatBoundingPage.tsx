@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Credentials } from '@aws-sdk/client-cognito-identity';
 import Config from '../../config/config';
 import { BoundingBox, BoundingPoint, CatadataRecord } from '../../dto/CatadataRecord';
@@ -245,37 +245,58 @@ export default function CatBoundingPage({ tabId, index, creds, username }: Props
         setSamOverlay(null);
         setBoundingBox(null);
         setSamError(null);
+        setCanvasSize({ w: 0, h: 0 });
         if (imageUrl) URL.revokeObjectURL(imageUrl);
         setImageUrl(null);
         setImageBlob(null);
     };
 
     // ---------------------------------------------------------------------------
-    // Image load — sync canvas size to displayed image size
+    // Keep canvas size in sync with displayed image size
+    // ResizeObserver handles window resizes; onImageLoad handles initial sizing.
     // ---------------------------------------------------------------------------
 
-    const onImageLoad = () => {
+    const syncCanvasSize = useCallback(() => {
         if (!imageRef.current) return;
-        setCanvasSize({ w: imageRef.current.clientWidth, h: imageRef.current.clientHeight });
+        const { clientWidth: w, clientHeight: h } = imageRef.current;
+        if (w > 0 && h > 0) setCanvasSize({ w, h });
+    }, []);
+
+    useEffect(() => {
+        if (!imageUrl || recordLoading) return;
+        const img = imageRef.current;
+        if (!img) return;
+        const observer = new ResizeObserver(syncCanvasSize);
+        observer.observe(img);
+        return () => observer.disconnect();
+    }, [imageUrl, recordLoading, syncCanvasSize]);
+
+    const onImageLoad = () => {
+        // Force a reflow so clientWidth/clientHeight are populated before we read them.
+        // Same technique used in BootBootsPage — timeout nudge proves more reliable
+        // than requestAnimationFrame alone in this layout.
+        setTimeout(() => {
+            if (!imageRef.current) return;
+            const el = imageRef.current.parentElement as HTMLElement;
+            el.style.width = '99%';
+            setTimeout(() => {
+                el.style.width = '';
+                syncCanvasSize();
+            }, 50);
+        }, 50);
     };
 
     // ---------------------------------------------------------------------------
     // Tap handler
     // ---------------------------------------------------------------------------
 
-    const onCanvasPointerDown = async (e: React.PointerEvent<HTMLCanvasElement>) => {
-        if (!imageBlob || !canvasRef.current) return;
-        const rect = canvasRef.current.getBoundingClientRect();
-        const x = e.clientX - rect.left;
-        const y = e.clientY - rect.top;
-        const newPoint: BoundingPoint = { x, y, label: tapMode === 'positive' ? 1 : 0 };
-        const newPoints = [...points, newPoint];
+    const addPoint = async (point: BoundingPoint) => {
+        const newPoints = [...points, point];
         setPoints(newPoints);
-
         setSamLoading(true);
         setSamError(null);
         try {
-            const result = await callSamServer(imageBlob, newPoints, canvasSize.w, canvasSize.h);
+            const result = await callSamServer(imageBlob!, newPoints, canvasSize.w, canvasSize.h);
             setSamOverlay(result.overlay);
             setBoundingBox(result.bounding_box);
         } catch (err: any) {
@@ -283,6 +304,19 @@ export default function CatBoundingPage({ tabId, index, creds, username }: Props
         } finally {
             setSamLoading(false);
         }
+    };
+
+    const onCanvasPointerDown = (e: React.PointerEvent<HTMLCanvasElement>) => {
+        if (!imageBlob || !canvasRef.current || e.button !== 0) return;
+        const rect = canvasRef.current.getBoundingClientRect();
+        addPoint({ x: e.clientX - rect.left, y: e.clientY - rect.top, label: tapMode === 'positive' ? 1 : 0 });
+    };
+
+    const onCanvasContextMenu = (e: React.MouseEvent<HTMLCanvasElement>) => {
+        e.preventDefault();
+        if (!imageBlob || !canvasRef.current) return;
+        const rect = canvasRef.current.getBoundingClientRect();
+        addPoint({ x: e.clientX - rect.left, y: e.clientY - rect.top, label: 0 });
     };
 
     // ---------------------------------------------------------------------------
@@ -311,18 +345,31 @@ export default function CatBoundingPage({ tabId, index, creds, username }: Props
         }
     };
 
-    const handleSave = async () => {
+    const handleSave = useCallback(async () => {
         if (!creds || !currentRecord || !boundingBox || !username) return;
         setSaving(true);
         try {
             await saveBoundingData(creds, currentRecord, boundingBox, points, username);
-            // Refresh stats in background
             getBoundingStats(creds).then(setStats).catch(console.error);
             if (selectedCat) await loadNextRecord(selectedCat);
         } finally {
             setSaving(false);
         }
-    };
+    }, [creds, currentRecord, boundingBox, username, points, selectedCat]);
+
+    // ---------------------------------------------------------------------------
+    // Keyboard shortcuts (annotation view only)
+    // ---------------------------------------------------------------------------
+
+    useEffect(() => {
+        if (view !== 'annotating') return;
+        const onKey = (e: KeyboardEvent) => {
+            if ((e.target as HTMLElement).tagName === 'INPUT') return;
+            if (e.key === 's' || e.key === 'S') handleSave();
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+    }, [view, handleSave]);
 
     // ---------------------------------------------------------------------------
     // Render
@@ -373,22 +420,6 @@ export default function CatBoundingPage({ tabId, index, creds, username }: Props
                 <span style={{ fontWeight: 'bold', fontSize: 18 }}>{selectedCat}</span>
                 {samLoading && <span style={{ color: '#aaa', fontSize: 14 }}>Segmenting…</span>}
                 {samError && <span style={{ color: '#f66', fontSize: 14 }}>{samError}</span>}
-
-                {/* Tap mode toggle */}
-                <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
-                    <button
-                        style={btnStyle(tapMode === 'positive' ? '#3a7a3a' : '#444')}
-                        onClick={() => setTapMode('positive')}
-                    >
-                        ● Cat
-                    </button>
-                    <button
-                        style={btnStyle(tapMode === 'negative' ? '#7a3a3a' : '#444')}
-                        onClick={() => setTapMode('negative')}
-                    >
-                        ● Background
-                    </button>
-                </div>
             </div>
 
             {/* Image + canvas */}
@@ -421,6 +452,7 @@ export default function CatBoundingPage({ tabId, index, creds, username }: Props
                                 height={canvasSize.h}
                                 style={{ position: 'absolute', top: 0, left: 0, cursor: 'crosshair', touchAction: 'none' }}
                                 onPointerDown={onCanvasPointerDown}
+                                onContextMenu={onCanvasContextMenu}
                             />
                         )}
                     </div>
@@ -434,6 +466,18 @@ export default function CatBoundingPage({ tabId, index, creds, username }: Props
                 </button>
                 <button style={btnStyle('#555')} onClick={handleSkip} disabled={saving || recordLoading}>
                     Skip
+                </button>
+                <button
+                    style={btnStyle(tapMode === 'positive' ? '#3a7a3a' : '#444')}
+                    onClick={() => setTapMode('positive')}
+                >
+                    ● Cat
+                </button>
+                <button
+                    style={btnStyle(tapMode === 'negative' ? '#7a3a3a' : '#444')}
+                    onClick={() => setTapMode('negative')}
+                >
+                    ● Background
                 </button>
                 <button
                     style={btnStyle('#7a3a3a')}

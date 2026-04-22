@@ -177,8 +177,8 @@ const App: React.FC = () => {
                                 <HomePage tabId={tabId} index={0} creds={creds}></HomePage>
                                 <BluetoothPage tabId={tabId} index={1} creds={creds}></BluetoothPage>
                                 <MQTTPage tabId={tabId} index={2} creds={creds}></MQTTPage>
-                                <BootBootsPage tabId={tabId} index={3} creds={creds} username={auth.user?.profile?.preferred_username || null}></BootBootsPage>
-                                <CatBoundingPage tabId={tabId} index={4} creds={creds} username={auth.user?.profile?.preferred_username || null}></CatBoundingPage>
+                                <BootBootsPage tabId={tabId} index={3} creds={creds} username={auth.user?.profile?.preferred_username || auth.user?.profile?.sub || null}></BootBootsPage>
+                                <CatBoundingPage tabId={tabId} index={4} creds={creds} username={auth.user?.profile?.preferred_username || auth.user?.profile?.sub || null}></CatBoundingPage>
                                 <EventsPage tabId={tabId} index={5} creds={creds}></EventsPage>
                                 <PCBPrinterPage tabId={tabId} index={6} creds={creds}></PCBPrinterPage>
                             </Box>

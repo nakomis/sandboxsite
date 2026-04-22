@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { CatadataRecord } from "../../dto/CatadataRecord";
 import mu from '../../images/mu.png';
 import tau from '../../images/tau.png';
@@ -49,6 +49,7 @@ const BootBootsPage = (props: BootBootProps) => {
     var [currentRecord, setCurrentRecord] = useState<CatadataRecord | null>(null);
     const [catPicture, setCatPicture] = useState<string | null>(null);
     const [localPrediction, setLocalPrediction] = useState<{ prediction: string; confidence: number } | null>(null);
+    const aiCanvasRef = useRef<HTMLCanvasElement>(null);
 
     function getCatReviewer() {
         if (!catPicture) {
@@ -99,9 +100,10 @@ const BootBootsPage = (props: BootBootProps) => {
                 justifyContent: 'center',
                 minHeight: 0,
                 overflow: 'hidden',
+                gap: 16,
             }}>
                 {/* inline-flex column: wrapper shrinks to image width, badge sits below right-aligned */}
-                <div style={{ display: 'inline-flex', flexDirection: 'column', maxWidth: '100%' }}>
+                <div style={{ display: 'inline-flex', flexDirection: 'column', maxWidth: '100%', minWidth: 0 }}>
                     <img className="img-fluid"
                         id="cat-image"
                         src={`${catPicture}`}
@@ -143,6 +145,19 @@ const BootBootsPage = (props: BootBootProps) => {
                             </div>
                         )}
                     </div>
+                </div>
+
+                {/* AI view: centre-cropped and scaled to exactly 240×240 */}
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0 }}>
+                    <canvas
+                        ref={aiCanvasRef}
+                        width={240}
+                        height={240}
+                        style={{ border: '1px solid #374151', imageRendering: 'pixelated' }}
+                    />
+                    <span style={{ color: '#9ca3af', fontSize: 11, fontFamily: 'monospace', marginTop: 6 }}>
+                        what the AI sees (240×240)
+                    </span>
                 </div>
             </div>
         )
@@ -300,6 +315,25 @@ const BootBootsPage = (props: BootBootProps) => {
             })();
         }
     }, [currentRecord]);
+
+    useEffect(() => {
+        const canvas = aiCanvasRef.current;
+        if (!catPicture || !canvas) return;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+
+        const img = new Image();
+        img.onload = () => {
+            // Centre-square crop: take the largest square from the middle of the image.
+            // For a 640×480 source this crops to 480×480 centred horizontally,
+            // matching the behaviour of tf.image.resize_with_crop_or_pad.
+            const cropSize = Math.min(img.width, img.height);
+            const sx = (img.width - cropSize) / 2;
+            const sy = (img.height - cropSize) / 2;
+            ctx.drawImage(img, sx, sy, cropSize, cropSize, 0, 0, 240, 240);
+        };
+        img.src = catPicture;
+    }, [catPicture]);
 
     useEffect(() => {
         if (!catPicture) return;
