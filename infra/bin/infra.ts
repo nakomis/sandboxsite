@@ -9,6 +9,7 @@ import { FirmwareBucketStack } from '../lib/firmware-bucket-stack';
 import { PcbPrinterStack } from '../lib/pcbprinter-stack';
 import { ApiStack } from '../lib/api-stack';
 import { WebSocketStack } from '../lib/websocket-stack';
+import { GithubOidcStack } from '../lib/github-oidc-stack';
 
 const londonEnv = { env: { account: process.env.CDK_DEFAULT_ACCOUNT, region: process.env.CDK_DEFAULT_REGION } };
 const nvirginiaEnv = { env: { account: process.env.CDK_DEFAULT_ACCOUNT, region: 'us-east-1' } };
@@ -66,6 +67,11 @@ const webSocketStack = new WebSocketStack(app, 'SandboxWebSocketStack', {
     ...londonEnv,
     domainName: domainName,
     wsDomainName: wsDomain,
+});
+
+new GithubOidcStack(app, 'SandboxGithubOidcStack', {
+    ...londonEnv,
+    description: 'GitHub Actions OIDC identity provider for the sandbox account',
 });
 
 cdk.Tags.of(app).add("MH-Project", "sandbox.nakomis.com");
