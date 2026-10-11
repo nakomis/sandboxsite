@@ -1,29 +1,15 @@
+// The sandbox remote only ever runs in the sandbox account (there is no prod sandbox, by design).
 export interface SandboxConfig {
-    env: string;
-    aws: {
-        region: string;
-    };
-    cognito: {
-        authority: string;
-        userPoolId: string;
-        userPoolClientId: string;
-        cognitoDomain: string;
-        redirectUri: string;
-        logoutUri: string;
-        identityPoolId: string;
-    };
-    bootboots: {
-        imagesBucket: string;
-    };
-    pcbPrinter: {
-        bucket: string;
-        table: string;
-    };
-    sam: {
-        serverUrl: string;  // e.g. http://192.168.1.x:7861 or http://localhost:7861
-    };
+    aws: { region: string };
+    /** SandboxIdentityPool: trusts the shared pool's nakomis-shell client as well as the old sandbox pool. */
+    identityPoolId: string;
+    pcbPrinter: { bucket: string; table: string };
 }
 
-let Config: SandboxConfig = require('./config.json');
+const Config: SandboxConfig = {
+    aws: { region: 'eu-west-2' },
+    identityPoolId: 'eu-west-2:f7fcd995-522d-4034-89d4-3ffff91da0bb',
+    pcbPrinter: { bucket: 'nakomis-pcbprinter-saves', table: 'pcbprinter-saves' },
+};
 
 export default Config;

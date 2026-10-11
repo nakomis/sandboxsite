@@ -3,10 +3,12 @@
 ## Project Overview
 
 Monorepo containing the BootBoots web platform:
-- **sandbox-app/** - React web application for firmware management, device control, and PCB printing
+- **sandbox-app/** - the Sandbox panel of nakomis-shell (Vite + Module Federation remote; PCB printer). Sandbox-only: never add a prod deploy.
 - **infra/** - AWS CDK infrastructure (CloudFront, Cognito, S3, API Gateway, certificates)
 
-**Live URL:** https://sandbox.nakomis.com
+**Live URL:** https://app.sandbox.nakomis.com/sandbox (the standalone https://sandbox.nakomis.com is the old CRA build, left running until decommissioned).
+
+BootBoots UI → nakomis-bootboots; firmware and devices → nakomis-fleet.
 
 ## Related Projects
 

@@ -10,6 +10,7 @@ import { PcbPrinterStack } from '../lib/pcbprinter-stack';
 import { ApiStack } from '../lib/api-stack';
 import { WebSocketStack } from '../lib/websocket-stack';
 import { GithubOidcStack } from '../lib/github-oidc-stack';
+import { GithubCiStack } from '../lib/github-ci-stack';
 
 const londonEnv = { env: { account: process.env.CDK_DEFAULT_ACCOUNT, region: process.env.CDK_DEFAULT_REGION } };
 const nvirginiaEnv = { env: { account: process.env.CDK_DEFAULT_ACCOUNT, region: 'us-east-1' } };
@@ -77,3 +78,5 @@ new GithubOidcStack(app, 'SandboxGithubOidcStack', {
 cdk.Tags.of(app).add("MH-Project", "sandbox.nakomis.com");
 const { version: infraVersion } = JSON.parse(fs.readFileSync('./version.json', 'utf-8'));
 cdk.Tags.of(app).add("MH-Version", infraVersion);
+
+new GithubCiStack(app, 'SandboxGithubCiStack', londonEnv);

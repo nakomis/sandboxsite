@@ -1,6 +1,8 @@
 # sandboxsite
 
-BootBoots sandbox — React frontend (`sandbox-app`) + AWS CDK infrastructure (`infra`).
+The **Sandbox** panel of [nakomis-shell](https://github.com/nakomis/nakomis-shell) (`app.sandbox.nakomis.com/sandbox`): a scratch space for trying things out (currently the PCB printer). It is **sandbox-only by design**: CI has no prod job and there is no prod role, so nothing here can drift into production. React remote in `sandbox-app`, AWS CDK infrastructure in `infra`.
+
+The BootBoots UI that used to live here moved to [nakomis-bootboots](https://github.com/nakomis/nakomis-bootboots), and firmware/device management to [nakomis-fleet](https://github.com/nakomis/nakomis-fleet).
 
 ## Support
 
@@ -12,28 +14,16 @@ If you find this useful, please consider buying me a coffee:
 
 Both the app and infra are versioned independently using `version.json` files with `-SNAPSHOT` suffixes between releases. Versions are visible in the app footer alongside the pcbprinter library version.
 
-### Releasing the React app
+### Publishing the Sandbox panel
+
+`sandbox-app` is a Vite + Module Federation remote (`sandbox/App`). CI builds it on every PR and publishes it to
+`s3://nakomis-shell-sandbox/remotes/sandbox/` on every merge to `main` (sandbox account only). Locally:
 
 ```bash
-cd sandbox-app
-bash scripts/deploy.sh           # patch bump
-bash scripts/deploy.sh --minor   # minor bump
-bash scripts/deploy.sh --major   # major bump
+cd sandbox-app && pnpm install && pnpm test && pnpm build   # pnpm dev for a shell-less dev harness
 ```
 
-Or via npm:
-
-```bash
-cd sandbox-app && npm run deploy -- --minor
-```
-
-The deploy script:
-1. Reads `sandbox-app/version.json`, strips `-SNAPSHOT` → release version
-2. **Aborts if `node_modules/pcbprinter` is a `-SNAPSHOT`** — release pcbprinter first, then `npm install`
-3. Builds the React app (after running `set-config.sh sandbox` for AWS config)
-4. Commits and tags `sandbox/x.y.z`
-5. Syncs to S3, invalidates CloudFront
-6. Bumps `version.json` to next `-SNAPSHOT`, commits, pushes with tags
+AWS access comes from the shell (`getAwsCredentials` on `SandboxIdentityPool`, which trusts the shell's Cognito client).
 
 ### Releasing the infra
 
@@ -51,13 +41,8 @@ The deploy script:
 
 ### Updating the pcbprinter dependency
 
-pcbprinter is a local `file:` path dep (`../../pcbprinter`). After releasing pcbprinter:
-
-```bash
-cd sandbox-app && npm install
-```
-
-This records the new release version in `package-lock.json`. The deploy script checks `node_modules/pcbprinter/package.json` (not the source `version.json`) — so `npm install` must be run before deploying if pcbprinter has been updated.
+pcbprinter is a local `file:` path dep (`../../pcbprinter`); CI checks it out alongside this repo and builds it.
+After changing pcbprinter, run `pnpm install` in `sandbox-app`.
 
 ## AWS profile
 
