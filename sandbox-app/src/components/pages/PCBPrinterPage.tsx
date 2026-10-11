@@ -11,8 +11,8 @@ import {
 } from 'pcbprinter';
 import type { PrinterOptions, StlOutputs } from 'pcbprinter';
 import * as THREE from 'three';
-import { STLLoader } from 'three/examples/jsm/loaders/STLLoader';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls';
+import { STLLoader } from 'three/examples/jsm/loaders/STLLoader.js';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import type { PcbSaveRecord } from '../../dto/PcbSaveRecord';
 import {
     hashBuffer,
@@ -48,7 +48,7 @@ const DEFAULT_UI_OPTIONS: UIOptions = {
 // Fetch font data for text relief
 async function loadFont(): Promise<ArrayBuffer | null> {
     try {
-        const resp = await fetch(process.env.PUBLIC_URL + '/fonts/DroidSansMono.ttf');
+        const resp = await fetch(import.meta.env.BASE_URL + 'fonts/DroidSansMono.ttf');
         return await resp.arrayBuffer();
     } catch {
         return null;
@@ -202,7 +202,7 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index, creds }) => {
         const model = parseFritzingSvg(svgContent, fullOptions);
         snapTracesToPads(model, fullOptions);
         return buildStls(model, fullOptions, {
-            locateFile: (f: string) => process.env.PUBLIC_URL + '/' + f,
+            locateFile: (f: string) => import.meta.env.BASE_URL + f,
         });
     }, []);
 
@@ -265,7 +265,7 @@ const PCBPrinterPage: React.FC<PCBPrinterProps> = ({ tabId, index, creds }) => {
                 pressStlKey,
                 options,
                 timestamp: now.toISOString(),
-                sandboxVersion: process.env.REACT_APP_VERSION ?? 'unknown',
+                sandboxVersion: __APP_VERSION__,
                 pcbprinterVersion: '0.3.0',
                 ttl: Math.floor(now.getTime() / 1000) + 30 * 24 * 60 * 60,
             };

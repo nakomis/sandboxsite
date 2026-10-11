@@ -5,6 +5,7 @@ import * as dynamodb from 'aws-cdk-lib/aws-dynamodb';
 import * as iam from 'aws-cdk-lib/aws-iam';
 import * as route53 from 'aws-cdk-lib/aws-route53';
 import * as s3 from 'aws-cdk-lib/aws-s3';
+import * as ssm from 'aws-cdk-lib/aws-ssm';
 import * as targets from 'aws-cdk-lib/aws-route53-targets';
 import { ITable, Table } from 'aws-cdk-lib/aws-dynamodb';
 import { Bucket } from 'aws-cdk-lib/aws-s3';
@@ -77,10 +78,17 @@ export class CognitoStack extends cdk.Stack {
         const identityPool = new cognito.CfnIdentityPool(this, 'SandboxIdentityPool', {
             identityPoolName: 'SandboxIdentityPool',
             allowUnauthenticatedIdentities: false,
-            cognitoIdentityProviders: [{
-                clientId: this.userPoolClient.userPoolClientId,
-                providerName: this.userPool.userPoolProviderName,
-            }],
+            cognitoIdentityProviders: [
+                // The Sandbox panel of nakomis-shell signs in with the shared nakomis-infra pool.
+                {
+                    clientId: ssm.StringParameter.valueForStringParameter(this, '/nakomis-shell/sandbox/cognito/client-id'),
+                    providerName: `cognito-idp.${this.region}.amazonaws.com/${ssm.StringParameter.valueForStringParameter(this, '/nakomis-infra/sandbox/cognito/user-pool-id')}`,
+                },
+                {
+                    clientId: this.userPoolClient.userPoolClientId,
+                    providerName: this.userPool.userPoolProviderName,
+                },
+            ],
         });
 
         this.userRole = new cdk.aws_iam.Role(this, 'SandboxUserRole', {

@@ -1,71 +1,41 @@
 {
-    "name": "my-app",
-    "version": "0.1.1",
-    "private": true,
-    "dependencies": {
-        "@aws-crypto/sha256-js": "^5.2.0",
-        "@aws-sdk/client-cognito-identity": "^3.848.0",
-        "@aws-sdk/client-dynamodb": "^3.975.0",
-        "@aws-sdk/client-s3": "^3.859.0",
-        "@aws-sdk/credential-provider-cognito-identity": "^3.859.0",
-        "@aws-sdk/lib-dynamodb": "^3.975.0",
-        "@aws-sdk/s3-request-presigner": "^3.859.0",
-        "@aws-sdk/signature-v4": "^3.370.0",
-        "@emotion/react": "^11.14.0",
-        "@emotion/styled": "^11.14.0",
-        "@fontsource/jetbrains-mono": "^5.2.8",
-        "@mui/material": "^7.2.0",
-        "@testing-library/dom": "^10.4.0",
-        "@testing-library/jest-dom": "^6.6.3",
-        "@testing-library/react": "^16.3.0",
-        "@testing-library/user-event": "^13.5.0",
-        "@types/jest": "^27.5.2",
-        "@types/node": "^16.18.126",
-        "@types/react": "^19.1.8",
-        "@types/react-dom": "^19.1.6",
-        "bootstrap": "^5.3.7",
-        "pcbprinter": "file:../../pcbprinter",
-        "react": "^19.1.0",
-        "react-dom": "^19.1.0",
-        "react-oidc-context": "^3.3.0",
-        "react-router": "^7.7.0",
-        "react-scripts": "5.0.1",
-        "three": "^0.172.0",
-        "typescript": "^4.9.5",
-        "typescript-lru-cache": "^2.0.0",
-        "watch": "^1.0.2",
-        "web-vitals": "^2.1.4"
-    },
-    "scripts": {
-        "start": "AWS_PROFILE=nakom.is-sandbox ./scripts/set-config.sh localhost && react-scripts start",
-        "build": "react-scripts build",
-        "test": "react-scripts test",
-        "eject": "react-scripts eject",
-        "deploy": "bash scripts/deploy.sh"
-    },
-    "eslintConfig": {
-        "extends": [
-            "react-app",
-            "react-app/jest"
-        ]
-    },
-    "browserslist": {
-        "production": [
-            ">0.2%",
-            "not dead",
-            "not op_mini all"
-        ],
-        "development": [
-            "last 1 chrome version",
-            "last 1 firefox version",
-            "last 1 safari version"
-        ]
-    },
-    "devDependencies": {
-        "@types/three": "^0.172.0",
-        "@types/web-bluetooth": "^0.0.21"
-    },
-    "overrides": {
-        "svgo": "^2.8.0"
-    }
+  "name": "sandbox-app",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@11.5.1",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "test": "vitest run",
+    "typecheck": "tsc -b"
+  },
+  "dependencies": {
+    "@aws-crypto/sha256-js": "^5.2.0",
+    "@aws-sdk/client-cognito-identity": "^3.1149.0",
+    "@aws-sdk/client-dynamodb": "^3.1149.0",
+    "@aws-sdk/client-s3": "^3.1149.0",
+    "@aws-sdk/lib-dynamodb": "^3.1149.0",
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.1",
+    "@mui/material": "^7.3.11",
+    "pcbprinter": "file:../../pcbprinter",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "three": "^0.172.0"
+  },
+  "devDependencies": {
+    "@module-federation/vite": "1.23.4",
+    "@testing-library/jest-dom": "^7.0.1",
+    "@testing-library/react": "^16.3.3",
+    "@types/node": "^26.6.5",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@types/three": "^0.172.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "jsdom": "^30.1.2",
+    "typescript": "~5.9.3",
+    "vite": "^8.3.4",
+    "vitest": "^5.0.3"
+  }
 }

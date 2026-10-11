@@ -1,0 +1,83 @@
+name: CI
+
+# Sandbox only, by design: this repo has no prod job and no prod role, so nothing from the sandbox can
+# drift into production. The Sandbox panel is published to app.sandbox.nakomis.com/remotes/sandbox/.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  CHECKOUT_REF: ${{ github.event_name == 'pull_request' && format('refs/pull/{0}/merge', github.event.pull_request.number) || github.sha }}
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  sandbox-app:
+    name: Sandbox app
+    runs-on: ubuntu-latest
+    steps:
+      # sandbox-app depends on file:../../pcbprinter, so lay the two repos out side by side.
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ env.CHECKOUT_REF }}
+          path: sandboxsite
+      - uses: actions/checkout@v7
+        with:
+          repository: nakomis/pcbprinter
+          path: pcbprinter
+      - uses: pnpm/action-setup@v6
+        with:
+          package_json_file: sandboxsite/sandbox-app/package.json
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '25'
+      - name: Build pcbprinter
+        working-directory: pcbprinter
+        run: npm ci && npm run build && npm run build:browser
+      - name: Install, test and build
+        working-directory: sandboxsite/sandbox-app
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm test
+          pnpm build
+      - name: Infra tests
+        working-directory: sandboxsite/infra
+        run: npm ci && npx jest
+      - uses: actions/upload-artifact@v7
+        with:
+          name: sandbox-remote
+          path: sandboxsite/sandbox-app/dist
+
+  deploy-sandbox:
+    name: Publish Sandbox panel
+    needs: sandbox-app
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    environment: sandbox
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: sandbox-remote
+          path: dist
+      - uses: aws-actions/configure-aws-credentials@v6
+        with:
+          role-to-assume: arn:aws:iam::975050268859:role/nakomis-sandboxsite-github-ci-sandbox
+          aws-region: eu-west-2
+      - name: Publish to remotes/sandbox
+        run: |
+          set -euo pipefail
+          bucket=$(aws ssm get-parameter --name /nakomis-shell/sandbox/bucket-name --query Parameter.Value --output text)
+          distribution=$(aws ssm get-parameter --name /nakomis-shell/sandbox/distribution-id --query Parameter.Value --output text)
+          aws s3 sync dist/assets "s3://$bucket/remotes/sandbox/assets/" --cache-control "public,max-age=31536000,immutable"
+          aws s3 sync dist "s3://$bucket/remotes/sandbox/" --exclude "assets/*" --cache-control "no-cache"
+          aws cloudfront create-invalidation --distribution-id "$distribution" --paths "/remotes/sandbox/*" --query Invalidation.Id --output text
