@@ -23,8 +23,9 @@ export class PcbPrinterStack extends cdk.Stack {
                     allowedHeaders: ['*'],
                     allowedMethods: [s3.HttpMethods.GET, s3.HttpMethods.PUT, s3.HttpMethods.HEAD],
                     allowedOrigins: [
-                        'https://sandbox.nakomis.com',
-                        'http://localhost:3000',
+                        'https://app.sandbox.nakomis.com', // the Sandbox panel inside nakomis-shell
+                        'http://localhost:5173', // nakomis-shell dev server
+                        'http://localhost:5175', // this remote's own dev server
                     ],
                 },
             ],
